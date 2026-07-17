@@ -1,0 +1,29 @@
+[package]
+name = "rawsr_bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+anyhow.workspace = true
+flutter_rust_bridge.workspace = true
+rawsr-core = { path = "../rawsr-core" }
+serde_json.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"
+needless_pass_by_value = "allow"
+similar_names = "allow"
+too_many_lines = "allow"

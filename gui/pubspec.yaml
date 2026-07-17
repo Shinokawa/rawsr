@@ -1,0 +1,47 @@
+name: rawsr_gui
+description: "RawSR 本地 RAW 降噪与超分辨率桌面应用。"
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  desktop_drop: ^0.7.1
+  file_selector: ^1.1.0
+  flutter_rust_bridge: 2.12.0
+  hooks_riverpod: ^2.6.1
+  intl: ^0.20.2
+  local_notifier: ^0.1.6
+  rawsr_bridge:
+    path: rust_builder
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: SourceHanSansSC
+      fonts:
+        - asset: assets/fonts/SourceHanSansSC-Regular.otf
+          weight: 400
+        - asset: assets/fonts/SourceHanSansSC-Medium.otf
+          weight: 500
+        - asset: assets/fonts/SourceHanSansSC-Bold.otf
+          weight: 700
+    - family: IBMPlexMono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexMono-Medium.ttf
+          weight: 500

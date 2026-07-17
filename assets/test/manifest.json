@@ -1,0 +1,26 @@
+{
+  "models": [
+    {
+      "name": "tiny-denoise",
+      "file": "tiny_denoise.onnx",
+      "scale": 1,
+      "kind": "denoise",
+      "tile": 16,
+      "overlap": 2,
+      "channel_order": "RGB",
+      "input_range": "zero_to_one",
+      "notes": "Dynamic-shape identity model for smoke tests"
+    },
+    {
+      "name": "tiny-sr-x2",
+      "file": "tiny_sr_x2.onnx",
+      "scale": 2,
+      "kind": "sr",
+      "tile": 16,
+      "overlap": 2,
+      "channel_order": "RGB",
+      "input_range": "zero_to_one",
+      "notes": "Dynamic-shape nearest-neighbor 2x model for smoke tests"
+    }
+  ]
+}

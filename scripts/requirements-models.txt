@@ -1,0 +1,5 @@
+torch==2.13.0
+torchvision==0.28.0
+spandrel==0.4.2
+onnx==1.22.0
+onnxscript==0.7.1

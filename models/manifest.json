@@ -1,0 +1,59 @@
+{
+  "models": [
+    {
+      "name": "scunet-gan",
+      "file": "scunet-gan.onnx",
+      "scale": 1,
+      "kind": "denoise",
+      "tile": 256,
+      "overlap": 32,
+      "channel_order": "RGB",
+      "input_range": "zero_to_one",
+      "notes": "SCUNet-GAN denoiser"
+    },
+    {
+      "name": "nafnet-width32",
+      "file": "nafnet-width32.onnx",
+      "scale": 1,
+      "kind": "denoise",
+      "tile": 256,
+      "overlap": 32,
+      "channel_order": "RGB",
+      "input_range": "zero_to_one",
+      "notes": "NAFNet width-32 denoiser"
+    },
+    {
+      "name": "span-x4",
+      "file": "span-x4.onnx",
+      "scale": 4,
+      "kind": "sr",
+      "tile": 256,
+      "overlap": 32,
+      "channel_order": "RGB",
+      "input_range": "zero_to_one",
+      "notes": "SPAN 4x super-resolution"
+    },
+    {
+      "name": "realesrgan-general-x4v3",
+      "file": "realesrgan-general-x4v3.onnx",
+      "scale": 4,
+      "kind": "sr",
+      "tile": 256,
+      "overlap": 32,
+      "channel_order": "RGB",
+      "input_range": "zero_to_one",
+      "notes": "RealESRGAN general-purpose 4x model"
+    },
+    {
+      "name": "realesrgan-x4plus",
+      "file": "realesrgan-x4plus.onnx",
+      "scale": 4,
+      "kind": "sr",
+      "tile": 256,
+      "overlap": 32,
+      "channel_order": "RGB",
+      "input_range": "zero_to_one",
+      "notes": "RealESRGAN x4plus model"
+    }
+  ]
+}

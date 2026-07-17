@@ -1,0 +1,3 @@
+# Copy this file to local-fixtures.toml and point it at a RAW file on this machine.
+sony_arw = "E:/path/to/sample.ARW"
+

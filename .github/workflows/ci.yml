@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  flutter:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - uses: Swatinem/rust-cache@v2
+      - name: Resolve Flutter dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/setup-flutter-plugins.ps1
+      - name: Resolve Flutter dependencies (macOS)
+        if: runner.os == 'macOS'
+        working-directory: gui
+        run: flutter pub get
+      - name: Generate FRB bindings
+        working-directory: gui
+        run: flutter_rust_bridge_codegen generate
+      - name: Analyze and test widgets
+        working-directory: gui
+        run: |
+          flutter analyze
+          flutter test test
+      - name: Build Windows
+        if: runner.os == 'Windows'
+        working-directory: gui
+        run: flutter build windows
+      - name: Build macOS
+        if: runner.os == 'macOS'
+        working-directory: gui
+        run: flutter build macos

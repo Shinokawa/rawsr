@@ -1,0 +1,29 @@
+[package]
+name = "rawsr-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+cuda = ["ort/cuda"]
+
+[dependencies]
+anyhow.workspace = true
+base64.workspace = true
+image.workspace = true
+ort.workspace = true
+rawler.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tiff.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
