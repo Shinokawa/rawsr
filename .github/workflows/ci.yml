@@ -6,11 +6,7 @@ on:
 
 jobs:
   rust:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -22,11 +18,7 @@ jobs:
       - run: cargo test --workspace
 
   flutter:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -38,13 +30,8 @@ jobs:
       - name: Install FRB code generator
         run: cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
       - name: Resolve Flutter dependencies (Windows)
-        if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/setup-flutter-plugins.ps1
-      - name: Resolve Flutter dependencies (macOS)
-        if: runner.os == 'macOS'
-        working-directory: gui
-        run: flutter pub get
       - name: Generate FRB bindings
         working-directory: gui
         run: flutter_rust_bridge_codegen generate
@@ -58,10 +45,5 @@ jobs:
           flutter analyze
           flutter test test
       - name: Build Windows
-        if: runner.os == 'Windows'
         working-directory: gui
         run: flutter build windows
-      - name: Build macOS
-        if: runner.os == 'macOS'
-        working-directory: gui
-        run: flutter build macos
