@@ -35,6 +35,8 @@ jobs:
           channel: stable
           cache: true
       - uses: Swatinem/rust-cache@v2
+      - name: Install FRB code generator
+        run: cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
       - name: Resolve Flutter dependencies (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -46,6 +48,10 @@ jobs:
       - name: Generate FRB bindings
         working-directory: gui
         run: flutter_rust_bridge_codegen generate
+      - name: Verify generated bindings
+        run: |
+          cargo fmt --all
+          git diff --exit-code
       - name: Analyze and test widgets
         working-directory: gui
         run: |
