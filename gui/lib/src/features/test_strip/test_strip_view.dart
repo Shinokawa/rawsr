@@ -25,6 +25,32 @@ class _TestStripViewState extends ConsumerState<TestStripView> {
     final state = ref.watch(testStripProvider);
     final palette = context.palette;
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    final scopeLabel = state.autoSampled
+        ? state.fullImage
+              ? '全图自动取样'
+              : '框选内自动取样'
+        : state.fullImage
+        ? '全图'
+        : '框选';
+    final title = state.kind == 'sr' && state.preDenoiseModel != null
+        ? '${state.preDenoiseModel} → 超分试片'
+        : '${state.kind == 'sr' ? '超分' : '降噪'}试片对比';
+    final reference = state.results
+        .where((result) => result.isReference)
+        .firstOrNull;
+    final processed = state.results
+        .where((result) => !result.isReference)
+        .firstOrNull;
+    final referenceLabel = state.kind == 'sr'
+        ? state.preDenoiseModel == null
+              ? '原图（超分前）'
+              : '降噪结果（超分前）'
+        : '原图';
+    final processedLabel = state.models.firstOrNull ?? '处理结果';
+    final stillPreparing =
+        state.preDenoiseModel != null &&
+        state.results.isEmpty &&
+        state.progress.values.every((value) => value <= 0.5);
     return ColoredBox(
       color: palette.canvas,
       child: Column(
@@ -38,10 +64,10 @@ class _TestStripViewState extends ConsumerState<TestStripView> {
             ),
             child: Row(
               children: <Widget>[
-                Text('试片对比', style: Theme.of(context).textTheme.titleSmall),
+                Text(title, style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(width: 10),
                 Text(
-                  '${state.results.length}/${state.models.length}',
+                  '$scopeLabel · 左侧基准 / 右侧结果',
                   style: context.mono.copyWith(
                     fontSize: 11,
                     color: palette.textLo,
@@ -50,7 +76,11 @@ class _TestStripViewState extends ConsumerState<TestStripView> {
                 const Spacer(),
                 if (state.running)
                   Text(
-                    '模型按顺序推理中…',
+                    stillPreparing
+                        ? state.preprocessCacheHit
+                              ? '已复用降噪缓存…'
+                              : '正在运行固定降噪前级…'
+                        : '正在生成右侧处理结果…',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 const SizedBox(width: 10),
@@ -84,26 +114,32 @@ class _TestStripViewState extends ConsumerState<TestStripView> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
-                        for (
-                          var index = 0;
-                          index < state.results.length;
-                          index++
-                        ) ...<Widget>[
-                          Expanded(
-                            child: _StripTile(
-                              result: state.results[index],
-                              zoom: _zoom,
-                              pan: _pan,
-                              reducedMotion: reducedMotion,
-                            ),
+                        Expanded(
+                          child: _StripTile(
+                            result: reference,
+                            label: referenceLabel,
+                            zoom: _zoom,
+                            pan: _pan,
+                            reducedMotion: reducedMotion,
+                            allowChoose: false,
                           ),
-                          if (index != state.results.length - 1)
-                            VerticalDivider(
-                              width: 1,
-                              thickness: 1,
-                              color: palette.line,
-                            ),
-                        ],
+                        ),
+                        VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: palette.line,
+                        ),
+                        Expanded(
+                          child: _StripTile(
+                            result: processed,
+                            label: processedLabel,
+                            zoom: _zoom,
+                            pan: _pan,
+                            reducedMotion: reducedMotion,
+                            allowChoose: true,
+                            progress: state.progress[processedLabel] ?? 0,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -157,15 +193,21 @@ class _ProgressList extends StatelessWidget {
 class _StripTile extends ConsumerWidget {
   const _StripTile({
     required this.result,
+    required this.label,
     required this.zoom,
     required this.pan,
     required this.reducedMotion,
+    required this.allowChoose,
+    this.progress = 0,
   });
 
-  final StripResult result;
+  final StripResult? result;
+  final String label;
   final double zoom;
   final Offset pan;
   final bool reducedMotion;
+  final bool allowChoose;
+  final double progress;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -175,10 +217,20 @@ class _StripTile extends ConsumerWidget {
       children: <Widget>[
         Expanded(
           child: ClipRect(
-            child: result.image == null
+            child: result == null
+                ? Center(
+                    child: SizedBox(
+                      width: 280,
+                      child: RawsrProgressBar(
+                        value: progress,
+                        label: '$label · ${(progress * 100).round()}%',
+                      ),
+                    ),
+                  )
+                : result!.image == null
                 ? Center(
                     child: Text(
-                      '模型失败：${result.reason ?? '未知原因'}',
+                      '模型失败：${result!.reason ?? '未知原因'}',
                       textAlign: TextAlign.center,
                       style: Theme.of(
                         context,
@@ -186,7 +238,7 @@ class _StripTile extends ConsumerWidget {
                     ),
                   )
                 : TweenAnimationBuilder<double>(
-                    key: ValueKey<String>(result.model),
+                    key: ValueKey<String>(result!.model),
                     duration: reducedMotion
                         ? Duration.zero
                         : const Duration(milliseconds: 300),
@@ -200,7 +252,7 @@ class _StripTile extends ConsumerWidget {
                         child: child!,
                       );
                     },
-                    child: RgbaFrameView(frame: result.image!),
+                    child: RgbaFrameView(frame: result!.image!),
                   ),
           ),
         ),
@@ -216,26 +268,26 @@ class _StripTile extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      result.model,
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    Text(
-                      '${result.elapsedMs} ms',
-                      style: context.mono.copyWith(
-                        fontSize: 11,
-                        color: palette.textLo,
+                    Text(label, style: Theme.of(context).textTheme.labelLarge),
+                    if (result != null)
+                      Text(
+                        result!.isReference
+                            ? '双线性缩放基准'
+                            : '${result!.elapsedMs} ms',
+                        style: context.mono.copyWith(
+                          fontSize: 11,
+                          color: palette.textLo,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
-              if (result.image != null)
+              if (allowChoose && result?.image != null)
                 RawsrButton(
                   label: '定片',
                   onPressed: () => ref
                       .read(testStripProvider.notifier)
-                      .chooseChampion(result.model),
+                      .chooseChampion(result!.model),
                 ),
             ],
           ),

@@ -13,12 +13,14 @@ abstract class RawsrBackend {
   Future<bridge.RgbaBytes> renderPreview({
     required bridge.ImageHandle handle,
     required int maxEdge,
+    required bridge.GradeParamsDto grade,
   });
 
   Future<bridge.RgbaBytes> renderRegion({
     required bridge.ImageHandle handle,
     required bridge.RegionRect rect,
     required int maxEdge,
+    required bridge.GradeParamsDto grade,
   });
 
   Future<bool> closeImage(bridge.ImageHandle handle);
@@ -29,6 +31,8 @@ abstract class RawsrBackend {
     required bridge.ImageHandle handle,
     required bridge.RegionRect rect,
     required List<String> models,
+    required String? denoiseModel,
+    required bridge.GradeParamsDto grade,
   });
 
   Stream<bridge.JobEvent> enqueueExport(bridge.ExportJob job);
@@ -65,8 +69,9 @@ class FfiRawsrBackend implements RawsrBackend {
   Future<bridge.RgbaBytes> renderPreview({
     required bridge.ImageHandle handle,
     required int maxEdge,
+    required bridge.GradeParamsDto grade,
   }) {
-    return bridge.renderPreview(handle: handle, maxEdge: maxEdge);
+    return bridge.renderPreview(handle: handle, maxEdge: maxEdge, grade: grade);
   }
 
   @override
@@ -74,8 +79,14 @@ class FfiRawsrBackend implements RawsrBackend {
     required bridge.ImageHandle handle,
     required bridge.RegionRect rect,
     required int maxEdge,
+    required bridge.GradeParamsDto grade,
   }) {
-    return bridge.renderRegion(handle: handle, rect: rect, maxEdge: maxEdge);
+    return bridge.renderRegion(
+      handle: handle,
+      rect: rect,
+      maxEdge: maxEdge,
+      grade: grade,
+    );
   }
 
   @override
@@ -91,8 +102,16 @@ class FfiRawsrBackend implements RawsrBackend {
     required bridge.ImageHandle handle,
     required bridge.RegionRect rect,
     required List<String> models,
+    required String? denoiseModel,
+    required bridge.GradeParamsDto grade,
   }) {
-    return bridge.runTestStrip(handle: handle, rect: rect, models: models);
+    return bridge.runTestStrip(
+      handle: handle,
+      rect: rect,
+      models: models,
+      denoiseModel: denoiseModel,
+      grade: grade,
+    );
   }
 
   @override

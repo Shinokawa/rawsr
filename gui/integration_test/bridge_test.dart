@@ -35,7 +35,20 @@ void main() {
 
     expect(handle.width, 7968);
     expect(handle.height, 5320);
-    final preview = await renderPreview(handle: handle, maxEdge: 512);
+    const grade = GradeParamsDto(
+      contrast: 0,
+      highlights: 0,
+      shadows: 0,
+      whites: 0,
+      blacks: 0,
+      vibrance: 0,
+      saturation: 0,
+    );
+    final preview = await renderPreview(
+      handle: handle,
+      maxEdge: 512,
+      grade: grade,
+    );
     expect(preview.width, 512);
     expect(preview.height, greaterThan(300));
     expect(preview.bytes.length, preview.width * preview.height * 4);
@@ -44,6 +57,7 @@ void main() {
       handle: handle,
       rect: const RegionRect(x: 3600, y: 2400, width: 512, height: 512),
       maxEdge: 512,
+      grade: grade,
     );
     expect(region.width, 512);
     expect(region.height, 512);

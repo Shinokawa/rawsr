@@ -9,13 +9,25 @@ class FakeRawsrBackend implements RawsrBackend {
   FakeRawsrBackend({
     this.stripCompletionOrder = const <String>[],
     this.exportStates = const <String>['queued', 'running', 'completed'],
+    this.stripCacheHit = false,
+    this.previewError,
   });
 
   final List<String> stripCompletionOrder;
   final List<String> exportStates;
+  final bool stripCacheHit;
+  Object? previewError;
   final List<ModelEntry> importedModels = <ModelEntry>[];
+  int renderPreviewCalls = 0;
   int renderRegionCalls = 0;
   int openCalls = 0;
+  ExportJob? lastExportJob;
+  GradeParamsDto? lastPreviewGrade;
+  GradeParamsDto? lastRegionGrade;
+  GradeParamsDto? lastStripGrade;
+  RegionRect? lastStripRect;
+  String? lastStripDenoiseModel;
+  List<String>? lastStripModels;
   BigInt _nextHandle = BigInt.one;
 
   static RgbaBytes get frame => RgbaBytes(
@@ -49,6 +61,7 @@ class FakeRawsrBackend implements RawsrBackend {
 
   @override
   Stream<JobEvent> enqueueExport(ExportJob job) async* {
+    lastExportJob = job;
     for (var index = 0; index < exportStates.length; index++) {
       final state = exportStates[index];
       yield JobEvent(
@@ -175,15 +188,24 @@ class FakeRawsrBackend implements RawsrBackend {
   Future<RgbaBytes> renderPreview({
     required ImageHandle handle,
     required int maxEdge,
-  }) async => frame;
+    required GradeParamsDto grade,
+  }) async {
+    renderPreviewCalls++;
+    lastPreviewGrade = grade;
+    final error = previewError;
+    if (error != null) throw error;
+    return frame;
+  }
 
   @override
   Future<RgbaBytes> renderRegion({
     required ImageHandle handle,
     required RegionRect rect,
     required int maxEdge,
+    required GradeParamsDto grade,
   }) async {
     renderRegionCalls++;
+    lastRegionGrade = grade;
     return frame;
   }
 
@@ -192,18 +214,45 @@ class FakeRawsrBackend implements RawsrBackend {
     required ImageHandle handle,
     required RegionRect rect,
     required List<String> models,
+    required String? denoiseModel,
+    required GradeParamsDto grade,
   }) async* {
+    lastStripRect = rect;
+    lastStripDenoiseModel = denoiseModel;
+    lastStripModels = List<String>.of(models);
+    lastStripGrade = grade;
+    if (denoiseModel != null) {
+      for (final model in models) {
+        yield StripEvent(
+          model: model,
+          isReference: false,
+          state: stripCacheHit ? 'cached' : 'preparing',
+          progress: stripCacheHit ? 0.5 : 0.25,
+          elapsedMs: BigInt.from(3),
+        );
+      }
+    }
+    yield StripEvent(
+      model: 'reference',
+      isReference: true,
+      state: 'completed',
+      progress: 1,
+      elapsedMs: BigInt.zero,
+      image: frame,
+    );
     final order = stripCompletionOrder.isEmpty ? models : stripCompletionOrder;
     for (final model in order) {
       yield StripEvent(
         model: model,
+        isReference: false,
         state: 'running',
-        progress: 0.5,
+        progress: denoiseModel == null ? 0.5 : 0.75,
         elapsedMs: BigInt.from(5),
       );
       await Future<void>.delayed(Duration.zero);
       yield StripEvent(
         model: model,
+        isReference: false,
         state: 'completed',
         progress: 1,
         elapsedMs: BigInt.from(10 + order.indexOf(model)),

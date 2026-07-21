@@ -53,6 +53,7 @@ class _RawsrWorkspaceState extends ConsumerState<RawsrWorkspace> {
       final previousPath = previous?.selected?.path;
       final nextItem = next.selected;
       if (nextItem != null && previousPath != nextItem.path) {
+        ref.read(testStripProvider.notifier).resetForSourceChange();
         unawaited(ref.read(canvasProvider.notifier).open(nextItem));
       }
     });

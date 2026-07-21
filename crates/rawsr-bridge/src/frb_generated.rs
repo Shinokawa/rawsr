@@ -27,7 +27,7 @@
 // Section: imports
 
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
-use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
+use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
 use flutter_rust_bridge::{Handler, IntoIntoDart};
 
 // Section: boilerplate
@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2008599849;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1360241032;
 
 // Section: executor
 
@@ -176,6 +176,39 @@ fn wire__crate__api__simple__extract_thumb_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::simple::extract_thumb(api_path)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__simple__grade_params_dto_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "grade_params_dto_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::simple::GradeParamsDto::default())?;
                     Ok(output_ok)
                 })())
             }
@@ -345,10 +378,12 @@ fn wire__crate__api__simple__render_preview_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_handle = <crate::api::simple::ImageHandle>::sse_decode(&mut deserializer);
             let api_max_edge = <u32>::sse_decode(&mut deserializer);
+            let api_grade = <crate::api::simple::GradeParamsDto>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
-                    let output_ok = crate::api::simple::render_preview(api_handle, api_max_edge)?;
+                    let output_ok =
+                        crate::api::simple::render_preview(api_handle, api_max_edge, api_grade)?;
                     Ok(output_ok)
                 })())
             }
@@ -380,11 +415,16 @@ fn wire__crate__api__simple__render_region_impl(
             let api_handle = <crate::api::simple::ImageHandle>::sse_decode(&mut deserializer);
             let api_rect = <crate::api::simple::RegionRect>::sse_decode(&mut deserializer);
             let api_max_edge = <u32>::sse_decode(&mut deserializer);
+            let api_grade = <crate::api::simple::GradeParamsDto>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, String>((move || {
-                    let output_ok =
-                        crate::api::simple::render_region(api_handle, api_rect, api_max_edge)?;
+                    let output_ok = crate::api::simple::render_region(
+                        api_handle,
+                        api_rect,
+                        api_max_edge,
+                        api_grade,
+                    )?;
                     Ok(output_ok)
                 })())
             }
@@ -416,6 +456,8 @@ fn wire__crate__api__simple__run_test_strip_impl(
             let api_handle = <crate::api::simple::ImageHandle>::sse_decode(&mut deserializer);
             let api_rect = <crate::api::simple::RegionRect>::sse_decode(&mut deserializer);
             let api_models = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_denoise_model = <Option<String>>::sse_decode(&mut deserializer);
+            let api_grade = <crate::api::simple::GradeParamsDto>::sse_decode(&mut deserializer);
             let api_sink = <StreamSink<
                 crate::api::simple::StripEvent,
                 flutter_rust_bridge::for_generated::SseCodec,
@@ -424,7 +466,12 @@ fn wire__crate__api__simple__run_test_strip_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::simple::run_test_strip(
-                        api_handle, api_rect, api_models, api_sink,
+                        api_handle,
+                        api_rect,
+                        api_models,
+                        api_denoise_model,
+                        api_grade,
+                        api_sink,
                     )?;
                     Ok(output_ok)
                 })())
@@ -547,6 +594,7 @@ impl SseDecode for crate::api::simple::ExportJob {
         let mut var_device = <String>::sse_decode(deserializer);
         let mut var_tileSize = <Option<u32>>::sse_decode(deserializer);
         let mut var_memoryBudgetMib = <Option<u32>>::sse_decode(deserializer);
+        let mut var_grade = <crate::api::simple::GradeParamsDto>::sse_decode(deserializer);
         return crate::api::simple::ExportJob {
             handle: var_handle,
             output_path: var_outputPath,
@@ -556,6 +604,7 @@ impl SseDecode for crate::api::simple::ExportJob {
             device: var_device,
             tile_size: var_tileSize,
             memory_budget_mib: var_memoryBudgetMib,
+            grade: var_grade,
         };
     }
 }
@@ -564,6 +613,28 @@ impl SseDecode for f32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_f32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for crate::api::simple::GradeParamsDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_contrast = <f32>::sse_decode(deserializer);
+        let mut var_highlights = <f32>::sse_decode(deserializer);
+        let mut var_shadows = <f32>::sse_decode(deserializer);
+        let mut var_whites = <f32>::sse_decode(deserializer);
+        let mut var_blacks = <f32>::sse_decode(deserializer);
+        let mut var_vibrance = <f32>::sse_decode(deserializer);
+        let mut var_saturation = <f32>::sse_decode(deserializer);
+        return crate::api::simple::GradeParamsDto {
+            contrast: var_contrast,
+            highlights: var_highlights,
+            shadows: var_shadows,
+            whites: var_whites,
+            blacks: var_blacks,
+            vibrance: var_vibrance,
+            saturation: var_saturation,
+        };
     }
 }
 
@@ -836,6 +907,7 @@ impl SseDecode for crate::api::simple::StripEvent {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_model = <String>::sse_decode(deserializer);
+        let mut var_isReference = <bool>::sse_decode(deserializer);
         let mut var_state = <String>::sse_decode(deserializer);
         let mut var_progress = <f32>::sse_decode(deserializer);
         let mut var_elapsedMs = <u64>::sse_decode(deserializer);
@@ -843,6 +915,7 @@ impl SseDecode for crate::api::simple::StripEvent {
         let mut var_reason = <Option<String>>::sse_decode(deserializer);
         return crate::api::simple::StripEvent {
             model: var_model,
+            is_reference: var_isReference,
             state: var_state,
             progress: var_progress,
             elapsed_ms: var_elapsedMs,
@@ -921,14 +994,20 @@ fn pde_ffi_dispatcher_primary_impl(
         2 => wire__crate__api__simple__close_image_impl(port, ptr, rust_vec_len, data_len),
         3 => wire__crate__api__simple__enqueue_export_impl(port, ptr, rust_vec_len, data_len),
         4 => wire__crate__api__simple__extract_thumb_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__simple__import_model_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__simple__list_models_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__simple__open_image_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__simple__render_preview_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__simple__render_region_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__simple__run_test_strip_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__simple__runtime_info_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__simple__grade_params_dto_default_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        6 => wire__crate__api__simple__import_model_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__simple__list_models_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__simple__open_image_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__simple__render_preview_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__simple__render_region_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__simple__run_test_strip_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__simple__runtime_info_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -984,6 +1063,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::simple::ExportJob {
             self.device.into_into_dart().into_dart(),
             self.tile_size.into_into_dart().into_dart(),
             self.memory_budget_mib.into_into_dart().into_dart(),
+            self.grade.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -993,6 +1073,32 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::simple::ExportJob>
     for crate::api::simple::ExportJob
 {
     fn into_into_dart(self) -> crate::api::simple::ExportJob {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::simple::GradeParamsDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.contrast.into_into_dart().into_dart(),
+            self.highlights.into_into_dart().into_dart(),
+            self.shadows.into_into_dart().into_dart(),
+            self.whites.into_into_dart().into_dart(),
+            self.blacks.into_into_dart().into_dart(),
+            self.vibrance.into_into_dart().into_dart(),
+            self.saturation.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::simple::GradeParamsDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::simple::GradeParamsDto>
+    for crate::api::simple::GradeParamsDto
+{
+    fn into_into_dart(self) -> crate::api::simple::GradeParamsDto {
         self
     }
 }
@@ -1189,6 +1295,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::simple::StripEvent {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.model.into_into_dart().into_dart(),
+            self.is_reference.into_into_dart().into_dart(),
             self.state.into_into_dart().into_dart(),
             self.progress.into_into_dart().into_dart(),
             self.elapsed_ms.into_into_dart().into_dart(),
@@ -1295,6 +1402,7 @@ impl SseEncode for crate::api::simple::ExportJob {
         <String>::sse_encode(self.device, serializer);
         <Option<u32>>::sse_encode(self.tile_size, serializer);
         <Option<u32>>::sse_encode(self.memory_budget_mib, serializer);
+        <crate::api::simple::GradeParamsDto>::sse_encode(self.grade, serializer);
     }
 }
 
@@ -1302,6 +1410,19 @@ impl SseEncode for f32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_f32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::simple::GradeParamsDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <f32>::sse_encode(self.contrast, serializer);
+        <f32>::sse_encode(self.highlights, serializer);
+        <f32>::sse_encode(self.shadows, serializer);
+        <f32>::sse_encode(self.whites, serializer);
+        <f32>::sse_encode(self.blacks, serializer);
+        <f32>::sse_encode(self.vibrance, serializer);
+        <f32>::sse_encode(self.saturation, serializer);
     }
 }
 
@@ -1502,6 +1623,7 @@ impl SseEncode for crate::api::simple::StripEvent {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.model, serializer);
+        <bool>::sse_encode(self.is_reference, serializer);
         <String>::sse_encode(self.state, serializer);
         <f32>::sse_encode(self.progress, serializer);
         <u64>::sse_encode(self.elapsed_ms, serializer);
@@ -1571,7 +1693,7 @@ mod io {
     use flutter_rust_bridge::for_generated::byteorder::{
         NativeEndian, ReadBytesExt, WriteBytesExt,
     };
-    use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
+    use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
     use flutter_rust_bridge::{Handler, IntoIntoDart};
 
     // Section: boilerplate
@@ -1595,7 +1717,7 @@ mod web {
     };
     use flutter_rust_bridge::for_generated::wasm_bindgen;
     use flutter_rust_bridge::for_generated::wasm_bindgen::prelude::*;
-    use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
+    use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
     use flutter_rust_bridge::{Handler, IntoIntoDart};
 
     // Section: boilerplate

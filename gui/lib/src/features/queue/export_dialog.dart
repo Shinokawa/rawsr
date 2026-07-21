@@ -14,13 +14,13 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
   final canvas = ref.read(canvasProvider);
   final item = ref.read(libraryProvider).selected;
   final models = ref.read(modelsProvider).valueOrNull ?? const <ModelEntry>[];
-  final champion = ref.read(testStripProvider).champion;
+  final strip = ref.read(testStripProvider);
   if (canvas.handle == null || item == null) {
     _showMessage(context, '无法加入队列：请先打开一张照片。');
     return;
   }
-  if (champion == null) {
-    _showMessage(context, '无法加入队列：请先生成试片并选择“定片”。');
+  if (canvas.loading || canvas.gradePreviewing) {
+    _showMessage(context, '调色预览正在更新，请完成后再导出。');
     return;
   }
 
@@ -30,11 +30,16 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
   final installedSr = models
       .where((entry) => entry.installed && entry.kind == 'sr')
       .toList();
-  String? denoise = installedDenoise.any((entry) => entry.name == champion)
-      ? champion
+  final denoiseChampion = strip.championFor('denoise');
+  final srChampion = strip.championFor('sr');
+  String? denoise =
+      installedDenoise.any((entry) => entry.name == denoiseChampion)
+      ? denoiseChampion
       : null;
-  String? sr = installedSr.any((entry) => entry.name == champion)
-      ? champion
+  String? sr =
+      installedSr.any((entry) => entry.name == srChampion) &&
+          strip.srChampionPreDenoiseModel == denoiseChampion
+      ? srChampion
       : null;
   var selectedArea = canvas.crop != null;
   var device = 'auto';
@@ -46,10 +51,7 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
         builder: (context, setState) {
           return AlertDialog(
             backgroundColor: context.palette.chrome1,
-            title: Text(
-              '加入导出队列',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
+            title: Text('处理与导出', style: Theme.of(context).textTheme.titleSmall),
             content: SizedBox(
               width: 420,
               child: Column(
@@ -70,7 +72,13 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
                           child: Text(entry.name),
                         ),
                     ],
-                    onChanged: (value) => setState(() => denoise = value),
+                    onChanged: (value) => setState(() {
+                      denoise = value;
+                      if (sr == srChampion &&
+                          denoise != strip.srChampionPreDenoiseModel) {
+                        sr = null;
+                      }
+                    }),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String?>(
@@ -89,6 +97,13 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
                     ],
                     onChanged: (value) => setState(() => sr = value),
                   ),
+                  if (strip.srNeedsRetest) ...<Widget>[
+                    const SizedBox(height: 8),
+                    Text(
+                      '降噪定片已变化，旧超分定片未自动带入；请重新生成超分试片，或在此手动选择。',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: device,
@@ -123,13 +138,23 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(
-                        '仅导出框选区域',
+                        '仅处理框选区域',
                         style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      subtitle: Text(
+                        '关闭后将处理整张照片',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                       value: selectedArea,
                       activeThumbColor: context.palette.safelight,
                       onChanged: (value) =>
                           setState(() => selectedArea = value),
+                    ),
+                  ] else ...<Widget>[
+                    const SizedBox(height: 12),
+                    Text(
+                      '处理范围：全图（未设置框选区域）',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ],
@@ -188,6 +213,7 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
     srModel: sr,
     device: device,
     memoryBudgetMib: 2048,
+    grade: canvas.grade,
   );
   await ref
       .read(queueProvider.notifier)

@@ -7,11 +7,12 @@ use std::time::Instant;
 
 use anyhow::{Context, Result, ensure};
 use rawsr_core::{
-    BaseCurve, ChannelOrder, DevelopParams, DevicePref, InputRange, Manifest, ManifestEntry,
-    ModelKind, Rect, Restorer, SrgbImage, SrgbTile, TileHint, TileOptions,
-    compiled_execution_providers, decode_raw, decode_std, develop, extract_thumbnail,
+    BaseCurve, ChannelOrder, DevelopParams, DevicePref, GradeParams as CoreGradeParams, InputRange,
+    Manifest, ManifestEntry, ModelKind, Rect, Restorer, SrgbImage, SrgbTile, TileHint, TileOptions,
+    compiled_execution_providers, decode_raw, decode_std, develop, extract_thumbnail, grade_rgb,
     last_execution_provider_allocations, load_model_from_path, restore_tiled_to_image,
-    restore_tiled_to_preview, restore_tiled_to_tiff, write_srgb16_tiff,
+    restore_tiled_to_preview_with_transform, restore_tiled_to_tiff_with_transform,
+    write_srgb16_tiff_with_transform,
 };
 
 use crate::frb_generated::StreamSink;
@@ -20,6 +21,10 @@ static NEXT_IMAGE_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_JOB_ID: AtomicU64 = AtomicU64::new(1);
 static IMAGE_CACHE: OnceLock<RwLock<HashMap<u64, Arc<SrgbImage>>>> = OnceLock::new();
 static JOB_CANCEL_FLAGS: OnceLock<RwLock<HashMap<u64, Arc<AtomicBool>>>> = OnceLock::new();
+static STRIP_PREPROCESS_CACHE: OnceLock<Mutex<Option<StripPreprocessCacheEntry>>> = OnceLock::new();
+static MODEL_CACHE: OnceLock<Mutex<HashMap<String, Arc<dyn Restorer>>>> = OnceLock::new();
+
+const STRIP_PREPROCESS_CACHE_MAX_PIXELS: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct ExifData {
@@ -49,7 +54,7 @@ pub struct ImageHandle {
     pub height: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegionRect {
     pub x: u32,
     pub y: u32,
@@ -57,11 +62,55 @@ pub struct RegionRect {
     pub height: u32,
 }
 
+#[derive(Debug)]
+struct StripPreprocessCacheEntry {
+    handle_id: u64,
+    rect: RegionRect,
+    denoise_model: String,
+    image: Arc<SrgbImage>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RgbaBytes {
     pub bytes: Vec<u8>,
     pub width: u32,
     pub height: u32,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GradeParamsDto {
+    pub contrast: f32,
+    pub highlights: f32,
+    pub shadows: f32,
+    pub whites: f32,
+    pub blacks: f32,
+    pub vibrance: f32,
+    pub saturation: f32,
+}
+
+impl GradeParamsDto {
+    fn to_core(self) -> Result<CoreGradeParams> {
+        for (name, value) in [
+            ("contrast", self.contrast),
+            ("highlights", self.highlights),
+            ("shadows", self.shadows),
+            ("whites", self.whites),
+            ("blacks", self.blacks),
+            ("vibrance", self.vibrance),
+            ("saturation", self.saturation),
+        ] {
+            ensure!(value.is_finite(), "grade parameter {name} must be finite");
+        }
+        Ok(CoreGradeParams {
+            contrast: self.contrast,
+            highlights: self.highlights,
+            shadows: self.shadows,
+            whites: self.whites,
+            blacks: self.blacks,
+            vibrance: self.vibrance,
+            saturation: self.saturation,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +131,7 @@ pub struct ModelEntry {
 #[derive(Debug, Clone)]
 pub struct StripEvent {
     pub model: String,
+    pub is_reference: bool,
     pub state: String,
     pub progress: f32,
     pub elapsed_ms: u64,
@@ -99,6 +149,7 @@ pub struct ExportJob {
     pub device: String,
     pub tile_size: Option<u32>,
     pub memory_budget_mib: Option<u32>,
+    pub grade: GradeParamsDto,
 }
 
 #[derive(Debug, Clone)]
@@ -153,16 +204,18 @@ pub fn open_image(
 pub fn render_preview(
     handle: ImageHandle,
     max_edge: u32,
+    grade: GradeParamsDto,
 ) -> std::result::Result<RgbaBytes, String> {
-    render_image(handle, None, max_edge).map_err(display_error)
+    render_image(handle, None, max_edge, grade).map_err(display_error)
 }
 
 pub fn render_region(
     handle: ImageHandle,
     rect: RegionRect,
     max_edge: u32,
+    grade: GradeParamsDto,
 ) -> std::result::Result<RgbaBytes, String> {
-    render_image(handle, Some(rect), max_edge).map_err(display_error)
+    render_image(handle, Some(rect), max_edge, grade).map_err(display_error)
 }
 
 pub fn close_image(handle: ImageHandle) -> std::result::Result<bool, String> {
@@ -171,6 +224,17 @@ pub fn close_image(handle: ImageHandle) -> std::result::Result<bool, String> {
         .map_err(|_| "image cache lock is poisoned".to_owned())?
         .remove(&handle.id)
         .is_some();
+    if removed {
+        let mut strip_cache = strip_preprocess_cache()
+            .lock()
+            .map_err(|_| "test-strip preprocess cache lock is poisoned".to_owned())?;
+        if strip_cache
+            .as_ref()
+            .is_some_and(|entry| entry.handle_id == handle.id)
+        {
+            *strip_cache = None;
+        }
+    }
     Ok(removed)
 }
 
@@ -182,9 +246,19 @@ pub fn run_test_strip(
     handle: ImageHandle,
     rect: RegionRect,
     models: Vec<String>,
+    denoise_model: Option<String>,
+    grade: GradeParamsDto,
     sink: StreamSink<StripEvent>,
 ) -> std::result::Result<(), String> {
-    run_test_strip_impl(handle, rect, &models, &sink).map_err(display_error)
+    run_test_strip_impl(
+        handle,
+        rect,
+        &models,
+        denoise_model.as_deref(),
+        grade,
+        &sink,
+    )
+    .map_err(display_error)
 }
 
 pub fn enqueue_export(
@@ -301,6 +375,7 @@ fn render_image(
     handle: ImageHandle,
     region: Option<RegionRect>,
     max_edge: u32,
+    grade: GradeParamsDto,
 ) -> Result<RgbaBytes> {
     ensure!(max_edge > 0, "maximum edge must be greater than zero");
     let image = cache()
@@ -327,6 +402,7 @@ fn render_image(
         .and_then(|pixels| pixels.checked_mul(4))
         .context("RGBA output size overflowed")?;
     let mut bytes = Vec::with_capacity(capacity);
+    let grade = grade.to_core()?;
     for output_y in 0..output_height {
         for output_x in 0..output_width {
             let source_x = f64::from(region.x)
@@ -335,7 +411,7 @@ fn render_image(
             let source_y = f64::from(region.y)
                 + (f64::from(output_y) + 0.5) * f64::from(region.height) / f64::from(output_height)
                 - 0.5;
-            let rgb = sample_bilinear(&image, source_x, source_y);
+            let rgb = sample_bilinear_with_grade(&image, source_x, source_y, &grade);
             bytes.extend(rgb.map(to_u8));
             bytes.push(u8::MAX);
         }
@@ -407,6 +483,48 @@ fn sample_bilinear(image: &SrgbImage, x: f64, y: f64) -> [f32; 3] {
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn sample_bilinear_with_grade(
+    image: &SrgbImage,
+    x: f64,
+    y: f64,
+    grade: &CoreGradeParams,
+) -> [f32; 3] {
+    if grade.is_identity() {
+        return sample_bilinear(image, x, y);
+    }
+
+    let max_x = (image.w - 1) as f64;
+    let max_y = (image.h - 1) as f64;
+    let x = x.clamp(0.0, max_x);
+    let y = y.clamp(0.0, max_y);
+    let x0 = x.floor() as usize;
+    let y0 = y.floor() as usize;
+    let x1 = (x0 + 1).min(image.w - 1);
+    let y1 = (y0 + 1).min(image.h - 1);
+    let tx = (x - x0 as f64) as f32;
+    let ty = (y - y0 as f64) as f32;
+    let top_left = grade_rgb(image_pixel(image, x0, y0), grade);
+    let top_right = grade_rgb(image_pixel(image, x1, y0), grade);
+    let bottom_left = grade_rgb(image_pixel(image, x0, y1), grade);
+    let bottom_right = grade_rgb(image_pixel(image, x1, y1), grade);
+
+    std::array::from_fn(|channel| {
+        let top = top_left[channel] + (top_right[channel] - top_left[channel]) * tx;
+        let bottom = bottom_left[channel] + (bottom_right[channel] - bottom_left[channel]) * tx;
+        top + (bottom - top) * ty
+    })
+}
+
+fn image_pixel(image: &SrgbImage, x: usize, y: usize) -> [f32; 3] {
+    let offset = (y * image.w + x) * 3;
+    [
+        image.data[offset],
+        image.data[offset + 1],
+        image.data[offset + 2],
+    ]
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn to_u8(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
@@ -415,77 +533,156 @@ fn run_test_strip_impl(
     handle: ImageHandle,
     rect: RegionRect,
     models: &[String],
+    denoise_model: Option<&str>,
+    grade: GradeParamsDto,
     sink: &StreamSink<StripEvent>,
 ) -> Result<()> {
-    ensure!(
-        (2..=4).contains(&models.len()),
-        "test strip requires between 2 and 4 models"
-    );
-    for (index, model) in models.iter().enumerate() {
-        ensure!(
-            !models[..index].contains(model),
-            "test strip contains duplicate model {model}"
-        );
-    }
+    ensure!(models.len() == 1, "test strip requires exactly one model");
+    let model = &models[0];
     let image = cached_image(handle)?;
+    let grade = grade.to_core()?;
     validate_region(rect, handle.width, handle.height)?;
-    for model in models {
-        let started = Instant::now();
+    let core_rect = to_core_rect(rect)?;
+    let (strip_input, candidate_crop, progress_start, expected_kind) =
+        if let Some(denoise_model) = denoise_model {
+            let preprocess_started = Instant::now();
+            send_strip_event(
+                sink,
+                StripEvent {
+                    model: model.clone(),
+                    is_reference: false,
+                    state: "preparing".to_owned(),
+                    progress: 0.0,
+                    elapsed_ms: 0,
+                    image: None,
+                    reason: None,
+                },
+            )?;
+            let last_progress = Mutex::new(-1.0_f32);
+            let (prepared, cache_hit) =
+                prepare_denoised_strip_input(handle, rect, &image, denoise_model, &|progress| {
+                    if let Ok(mut last) = last_progress.lock()
+                        && (progress - *last >= 0.02 || progress >= 1.0)
+                    {
+                        *last = progress;
+                        let _ = sink.add(StripEvent {
+                            model: model.clone(),
+                            is_reference: false,
+                            state: "preparing".to_owned(),
+                            progress: progress * 0.5,
+                            elapsed_ms: elapsed_millis(preprocess_started),
+                            image: None,
+                            reason: None,
+                        });
+                    }
+                })?;
+            if cache_hit {
+                send_strip_event(
+                    sink,
+                    StripEvent {
+                        model: model.clone(),
+                        is_reference: false,
+                        state: "cached".to_owned(),
+                        progress: 0.5,
+                        elapsed_ms: 0,
+                        image: None,
+                        reason: None,
+                    },
+                )?;
+            }
+            (prepared, None, 0.5, Some(ModelKind::Sr))
+        } else {
+            (image, Some(core_rect), 0.0, None)
+        };
+    let started = Instant::now();
+    send_strip_event(
+        sink,
+        StripEvent {
+            model: model.clone(),
+            is_reference: false,
+            state: "running".to_owned(),
+            progress: progress_start,
+            elapsed_ms: 0,
+            image: None,
+            reason: None,
+        },
+    )?;
+    let loaded = load_named_model(model, expected_kind, DevicePref::Auto);
+    match loaded.and_then(|(_, restorer)| {
+        let reference =
+            render_strip_reference(&strip_input, candidate_crop, restorer.scale(), &grade, 2048)?;
         send_strip_event(
             sink,
             StripEvent {
-                model: model.clone(),
-                state: "running".to_owned(),
-                progress: 0.0,
+                model: "reference".to_owned(),
+                is_reference: true,
+                state: "completed".to_owned(),
+                progress: 1.0,
                 elapsed_ms: 0,
-                image: None,
+                image: Some(reference),
                 reason: None,
             },
         )?;
-        match run_one_strip(&image, rect, model, sink, started) {
-            Ok(output) => send_strip_event(
-                sink,
-                StripEvent {
-                    model: model.clone(),
-                    state: "completed".to_owned(),
-                    progress: 1.0,
-                    elapsed_ms: elapsed_millis(started),
-                    image: Some(output),
-                    reason: None,
-                },
-            )?,
-            Err(error) => send_strip_event(
-                sink,
-                StripEvent {
-                    model: model.clone(),
-                    state: "failed".to_owned(),
-                    progress: 1.0,
-                    elapsed_ms: elapsed_millis(started),
-                    image: None,
-                    reason: Some(format!("{error:#}")),
-                },
-            )?,
-        }
+        run_one_strip(
+            &strip_input,
+            candidate_crop,
+            model,
+            restorer.as_ref(),
+            &grade,
+            sink,
+            started,
+            progress_start,
+            1.0 - progress_start,
+        )
+    }) {
+        Ok(output) => send_strip_event(
+            sink,
+            StripEvent {
+                model: model.clone(),
+                is_reference: false,
+                state: "completed".to_owned(),
+                progress: 1.0,
+                elapsed_ms: elapsed_millis(started),
+                image: Some(output),
+                reason: None,
+            },
+        )?,
+        Err(error) => send_strip_event(
+            sink,
+            StripEvent {
+                model: model.clone(),
+                is_reference: false,
+                state: "failed".to_owned(),
+                progress: 1.0,
+                elapsed_ms: elapsed_millis(started),
+                image: None,
+                reason: Some(format!("{error:#}")),
+            },
+        )?,
     }
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_one_strip(
     image: &SrgbImage,
-    rect: RegionRect,
+    crop: Option<Rect>,
     model: &str,
+    restorer: &dyn Restorer,
+    grade: &CoreGradeParams,
     sink: &StreamSink<StripEvent>,
     started: Instant,
+    progress_start: f32,
+    progress_span: f32,
 ) -> Result<RgbaBytes> {
-    let (_, restorer) = load_named_model(model, None, DevicePref::Auto)?;
     let last_progress = Mutex::new(-1.0_f32);
-    let core_rect = to_core_rect(rect)?;
-    let restored = restore_tiled_to_preview(
+    let restored = restore_tiled_to_preview_with_transform(
         image,
-        restorer.as_ref(),
-        Some(core_rect),
+        restorer,
+        crop,
         TileOptions::default(),
         16 * 1024 * 1024,
+        grade,
         &|progress| {
             if let Ok(mut last) = last_progress.lock()
                 && (progress - *last >= 0.02 || progress >= 1.0)
@@ -493,8 +690,9 @@ fn run_one_strip(
                 *last = progress;
                 let _ = sink.add(StripEvent {
                     model: model.to_owned(),
+                    is_reference: false,
                     state: "running".to_owned(),
-                    progress,
+                    progress: progress_start + progress * progress_span,
                     elapsed_ms: elapsed_millis(started),
                     image: None,
                     reason: None,
@@ -503,6 +701,131 @@ fn run_one_strip(
         },
     )?;
     render_standalone(restored, 2048)
+}
+
+fn render_strip_reference(
+    image: &SrgbImage,
+    crop: Option<Rect>,
+    scale: u32,
+    grade: &CoreGradeParams,
+    max_edge: u32,
+) -> Result<RgbaBytes> {
+    let crop = crop
+        .unwrap_or(Rect {
+            x: 0,
+            y: 0,
+            w: image.w,
+            h: image.h,
+        })
+        .validate_inside(image.w, image.h)?;
+    let scale = usize::try_from(scale).context("model scale does not fit usize")?;
+    let native_width = crop
+        .w
+        .checked_mul(scale)
+        .context("reference width overflowed")?;
+    let native_height = crop
+        .h
+        .checked_mul(scale)
+        .context("reference height overflowed")?;
+    let (width, height) = fit_dimensions(
+        u32::try_from(native_width).context("reference width exceeds u32")?,
+        u32::try_from(native_height).context("reference height exceeds u32")?,
+        max_edge,
+    );
+    let width_usize = usize::try_from(width)?;
+    let height_usize = usize::try_from(height)?;
+    let mut bytes = Vec::with_capacity(width_usize * height_usize * 4);
+    for y in 0..height_usize {
+        let source_y =
+            crop.y as f64 + ((y as f64 + 0.5) * crop.h as f64 / height_usize as f64 - 0.5);
+        for x in 0..width_usize {
+            let source_x =
+                crop.x as f64 + ((x as f64 + 0.5) * crop.w as f64 / width_usize as f64 - 0.5);
+            let rgb = sample_bilinear_with_grade(image, source_x, source_y, grade);
+            bytes.extend(rgb.into_iter().map(to_u8));
+            bytes.push(u8::MAX);
+        }
+    }
+    Ok(RgbaBytes {
+        bytes,
+        width,
+        height,
+    })
+}
+
+fn prepare_denoised_strip_input(
+    handle: ImageHandle,
+    rect: RegionRect,
+    image: &SrgbImage,
+    denoise_model: &str,
+    progress: &dyn Fn(f32),
+) -> Result<(Arc<SrgbImage>, bool)> {
+    let cached = cached_strip_preprocess(handle.id, rect, denoise_model)?;
+    if let Some(cached) = cached {
+        return Ok((cached, true));
+    }
+
+    let (_, restorer) =
+        load_named_model(denoise_model, Some(ModelKind::Denoise), DevicePref::Auto)?;
+    let denoised = Arc::new(restore_tiled_to_image(
+        image,
+        restorer.as_ref(),
+        Some(to_core_rect(rect)?),
+        TileOptions::default(),
+        progress,
+    )?);
+    store_strip_preprocess(handle.id, rect, denoise_model, &denoised)?;
+    Ok((denoised, false))
+}
+
+fn cached_strip_preprocess(
+    handle_id: u64,
+    rect: RegionRect,
+    denoise_model: &str,
+) -> Result<Option<Arc<SrgbImage>>> {
+    Ok(strip_preprocess_cache()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("test-strip preprocess cache lock is poisoned"))?
+        .as_ref()
+        .filter(|entry| {
+            entry.handle_id == handle_id
+                && entry.rect == rect
+                && entry.denoise_model == denoise_model
+        })
+        .map(|entry| Arc::clone(&entry.image)))
+}
+
+fn store_strip_preprocess(
+    handle_id: u64,
+    rect: RegionRect,
+    denoise_model: &str,
+    image: &Arc<SrgbImage>,
+) -> Result<bool> {
+    if !strip_preprocess_is_cacheable(image.w, image.h) {
+        return Ok(false);
+    }
+    let image_cache = cache()
+        .read()
+        .map_err(|_| anyhow::anyhow!("image cache lock is poisoned"))?;
+    if !image_cache.contains_key(&handle_id) {
+        return Ok(false);
+    }
+    *strip_preprocess_cache()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("test-strip preprocess cache lock is poisoned"))? =
+        Some(StripPreprocessCacheEntry {
+            handle_id,
+            rect,
+            denoise_model: denoise_model.to_owned(),
+            image: Arc::clone(image),
+        });
+    Ok(true)
+}
+
+fn strip_preprocess_is_cacheable(width: usize, height: usize) -> bool {
+    width
+        .checked_mul(height)
+        .is_some_and(|pixels| pixels <= STRIP_PREPROCESS_CACHE_MAX_PIXELS)
 }
 
 fn enqueue_export_impl(job: ExportJob, sink: &StreamSink<JobEvent>) -> Result<()> {
@@ -611,6 +934,7 @@ fn export_job_work(
             .map(|value| value as usize * 1024 * 1024),
     };
     let device = parse_device(&job.device)?;
+    let grade = job.grade.to_core()?;
     let stage_count =
         usize::from(job.denoise_model.is_some()) + usize::from(job.sr_model.is_some());
     let stage_count = stage_count.max(1) as f32;
@@ -637,20 +961,28 @@ fn export_job_work(
     if let Some(model) = job.sr_model.as_deref() {
         let (_, restorer) = load_named_model(model, Some(ModelKind::Sr), device)?;
         let restorer = CancellableRestorer::new(restorer, Arc::clone(&cancelled));
-        restore_tiled_to_tiff(&output, &current, &restorer, None, options, &|progress| {
-            let overall = (completed_stages + progress) / stage_count;
-            let _ = sink.add(JobEvent {
-                job_id,
-                state: "running".to_owned(),
-                progress: overall,
-                message: format!("正在超分 · {}%", (progress * 100.0).round()),
-                output_path: None,
-                reason: None,
-            });
-        })?;
+        restore_tiled_to_tiff_with_transform(
+            &output,
+            &current,
+            &restorer,
+            None,
+            options,
+            &grade,
+            &|progress| {
+                let overall = (completed_stages + progress) / stage_count;
+                let _ = sink.add(JobEvent {
+                    job_id,
+                    state: "running".to_owned(),
+                    progress: overall,
+                    message: format!("正在超分 · {}%", (progress * 100.0).round()),
+                    output_path: None,
+                    reason: None,
+                });
+            },
+        )?;
     } else {
         ensure_not_cancelled(&cancelled)?;
-        write_srgb16_tiff(&output, &current)?;
+        write_srgb16_tiff_with_transform(&output, &current, &grade)?;
     }
     ensure_not_cancelled(&cancelled)
 }
@@ -659,7 +991,7 @@ fn load_named_model(
     name: &str,
     expected_kind: Option<ModelKind>,
     device: DevicePref,
-) -> Result<(ManifestEntry, Box<dyn Restorer>)> {
+) -> Result<(ManifestEntry, Arc<dyn Restorer>)> {
     let manifest_path = find_manifest()?;
     let manifest = Manifest::load(&manifest_path)?;
     let entry = manifest
@@ -683,8 +1015,25 @@ fn load_named_model(
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join(&entry.file);
-    let restorer = load_model_from_path(&entry, &model_path, device)?;
+    let cache_key = format!("{}::{device:?}", model_path.to_string_lossy());
+    if let Some(restorer) = model_cache()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("model cache lock is poisoned"))?
+        .get(&cache_key)
+        .cloned()
+    {
+        return Ok((entry, restorer));
+    }
+    let restorer: Arc<dyn Restorer> = Arc::from(load_model_from_path(&entry, &model_path, device)?);
+    model_cache()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("model cache lock is poisoned"))?
+        .insert(cache_key, Arc::clone(&restorer));
     Ok((entry, restorer))
+}
+
+fn model_cache() -> &'static Mutex<HashMap<String, Arc<dyn Restorer>>> {
+    MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn parse_device(value: &str) -> Result<DevicePref> {
@@ -741,7 +1090,7 @@ fn render_standalone(image: SrgbImage, max_edge: u32) -> Result<RgbaBytes> {
         .write()
         .map_err(|_| anyhow::anyhow!("image cache lock is poisoned"))?
         .insert(id, Arc::new(image));
-    let rendered = render_image(handle, None, max_edge);
+    let rendered = render_image(handle, None, max_edge, GradeParamsDto::default());
     cache()
         .write()
         .map_err(|_| anyhow::anyhow!("image cache lock is poisoned"))?
@@ -769,12 +1118,12 @@ fn ensure_not_cancelled(cancelled: &AtomicBool) -> Result<()> {
 }
 
 struct CancellableRestorer {
-    inner: Box<dyn Restorer>,
+    inner: Arc<dyn Restorer>,
     cancelled: Arc<AtomicBool>,
 }
 
 impl CancellableRestorer {
-    fn new(inner: Box<dyn Restorer>, cancelled: Arc<AtomicBool>) -> Self {
+    fn new(inner: Arc<dyn Restorer>, cancelled: Arc<AtomicBool>) -> Self {
         Self { inner, cancelled }
     }
 }
@@ -981,6 +1330,10 @@ fn job_cancel_flags() -> &'static RwLock<HashMap<u64, Arc<AtomicBool>>> {
     JOB_CANCEL_FLAGS.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
+fn strip_preprocess_cache() -> &'static Mutex<Option<StripPreprocessCacheEntry>> {
+    STRIP_PREPROCESS_CACHE.get_or_init(|| Mutex::new(None))
+}
+
 fn display_error(error: anyhow::Error) -> String {
     format!("{error:#}")
 }
@@ -998,7 +1351,7 @@ mod tests {
             height: 4,
         };
         cache().write().unwrap().insert(handle.id, image);
-        let preview = render_preview(handle, 4).unwrap();
+        let preview = render_preview(handle, 4, GradeParamsDto::default()).unwrap();
         assert_eq!((preview.width, preview.height), (4, 2));
         assert_eq!(preview.bytes.len(), 4 * 2 * 4);
         let region = render_region(
@@ -1010,6 +1363,7 @@ mod tests {
                 height: 2,
             },
             8,
+            GradeParamsDto::default(),
         )
         .unwrap();
         assert_eq!((region.width, region.height), (4, 2));
@@ -1035,9 +1389,121 @@ mod tests {
                 height: 2,
             },
             2,
+            GradeParamsDto::default(),
         )
         .unwrap_err();
         assert!(error.contains("outside"));
         close_image(handle).unwrap();
+    }
+
+    #[test]
+    fn preview_and_region_apply_the_same_grade() {
+        let image = Arc::new(SrgbImage::new(vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0], 2, 1).unwrap());
+        let handle = ImageHandle {
+            id: NEXT_IMAGE_ID.fetch_add(1, Ordering::Relaxed),
+            width: 2,
+            height: 1,
+        };
+        cache().write().unwrap().insert(handle.id, image);
+        let identity = render_preview(handle, 2, GradeParamsDto::default()).unwrap();
+        let grade = GradeParamsDto {
+            saturation: -1.0,
+            ..GradeParamsDto::default()
+        };
+        let preview = render_preview(handle, 2, grade).unwrap();
+        let region = render_region(
+            handle,
+            RegionRect {
+                x: 0,
+                y: 0,
+                width: 2,
+                height: 1,
+            },
+            2,
+            grade,
+        )
+        .unwrap();
+        assert_ne!(preview.bytes, identity.bytes);
+        assert_eq!(preview.bytes, region.bytes);
+        for pixel in preview.bytes.chunks_exact(4) {
+            assert_eq!(pixel[0], pixel[1]);
+            assert_eq!(pixel[1], pixel[2]);
+            assert_eq!(pixel[3], u8::MAX);
+        }
+        assert!(close_image(handle).unwrap());
+    }
+
+    #[test]
+    fn preview_applies_grade_before_downsampling() {
+        let image = Arc::new(SrgbImage::new(vec![0.1, 0.1, 0.1, 0.5, 0.5, 0.5], 2, 1).unwrap());
+        let handle = ImageHandle {
+            id: NEXT_IMAGE_ID.fetch_add(1, Ordering::Relaxed),
+            width: 2,
+            height: 1,
+        };
+        cache().write().unwrap().insert(handle.id, image);
+        let grade = GradeParamsDto {
+            contrast: 1.0,
+            ..GradeParamsDto::default()
+        };
+        let preview = render_preview(handle, 1, grade).unwrap();
+        let core_grade = grade.to_core().unwrap();
+        let dark = grade_rgb([0.1; 3], &core_grade);
+        let mid = grade_rgb([0.5; 3], &core_grade);
+        let expected = to_u8((dark[0] + mid[0]) * 0.5);
+        assert_eq!((preview.width, preview.height), (1, 1));
+        assert_eq!(preview.bytes, vec![expected, expected, expected, u8::MAX]);
+        assert!(close_image(handle).unwrap());
+    }
+
+    #[test]
+    fn strip_preprocess_cache_uses_handle_region_and_model_and_clears_on_close() {
+        let source = Arc::new(SrgbImage::new(vec![0.25; 4 * 3 * 3], 4, 3).unwrap());
+        let handle = ImageHandle {
+            id: NEXT_IMAGE_ID.fetch_add(1, Ordering::Relaxed),
+            width: 4,
+            height: 3,
+        };
+        cache().write().unwrap().insert(handle.id, source);
+        let rect = RegionRect {
+            x: 1,
+            y: 1,
+            width: 2,
+            height: 2,
+        };
+        let prepared = Arc::new(SrgbImage::new(vec![0.5; 2 * 2 * 3], 2, 2).unwrap());
+        assert!(store_strip_preprocess(handle.id, rect, "denoise-a", &prepared).unwrap());
+        let hit = cached_strip_preprocess(handle.id, rect, "denoise-a")
+            .unwrap()
+            .unwrap();
+        assert!(Arc::ptr_eq(&hit, &prepared));
+        assert!(
+            cached_strip_preprocess(handle.id + 1, rect, "denoise-a")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            cached_strip_preprocess(handle.id, RegionRect { x: 0, ..rect }, "denoise-a")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            cached_strip_preprocess(handle.id, rect, "denoise-b")
+                .unwrap()
+                .is_none()
+        );
+        assert!(close_image(handle).unwrap());
+        assert!(
+            cached_strip_preprocess(handle.id, rect, "denoise-a")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn strip_preprocess_cache_respects_pixel_budget_without_allocating() {
+        assert!(strip_preprocess_is_cacheable(4096, 4096));
+        assert!(!strip_preprocess_is_cacheable(4097, 4096));
+        assert!(!strip_preprocess_is_cacheable(usize::MAX, 2));
     }
 }

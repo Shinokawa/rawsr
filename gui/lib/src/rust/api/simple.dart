@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cache`, `cached_image`, `crop_srgb`, `display_error`, `elapsed_millis`, `enqueue_export_impl`, `ensure_not_cancelled`, `export_job_work`, `extract_thumb_impl`, `find_manifest`, `fit_dimensions`, `import_model_impl`, `job_cancel_flags`, `list_models_impl`, `load_named_model`, `model_entry_to_bridge`, `new`, `open_image_impl`, `parse_device`, `render_image`, `render_standalone`, `run_one_strip`, `run_test_strip_impl`, `sample_bilinear`, `send_job_event`, `send_strip_event`, `to_core_rect`, `to_u8`, `validate_region`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CancellableRestorer`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `run`, `scale`, `tile_hint`
+// These functions are ignored because they are not marked as `pub`: `cache`, `cached_image`, `cached_strip_preprocess`, `crop_srgb`, `display_error`, `elapsed_millis`, `enqueue_export_impl`, `ensure_not_cancelled`, `export_job_work`, `extract_thumb_impl`, `find_manifest`, `fit_dimensions`, `image_pixel`, `import_model_impl`, `job_cancel_flags`, `list_models_impl`, `load_named_model`, `model_cache`, `model_entry_to_bridge`, `new`, `open_image_impl`, `parse_device`, `prepare_denoised_strip_input`, `render_image`, `render_standalone`, `render_strip_reference`, `run_one_strip`, `run_test_strip_impl`, `sample_bilinear_with_grade`, `sample_bilinear`, `send_job_event`, `send_strip_event`, `store_strip_preprocess`, `strip_preprocess_cache`, `strip_preprocess_is_cacheable`, `to_core_rect`, `to_core`, `to_u8`, `validate_region`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CancellableRestorer`, `StripPreprocessCacheEntry`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `run`, `scale`, `tile_hint`
 
 Future<ThumbData> extractThumb({required String path}) =>
     RustLib.instance.api.crateApiSimpleExtractThumb(path: path);
@@ -26,19 +26,23 @@ Future<ImageHandle> openImage({
 Future<RgbaBytes> renderPreview({
   required ImageHandle handle,
   required int maxEdge,
+  required GradeParamsDto grade,
 }) => RustLib.instance.api.crateApiSimpleRenderPreview(
   handle: handle,
   maxEdge: maxEdge,
+  grade: grade,
 );
 
 Future<RgbaBytes> renderRegion({
   required ImageHandle handle,
   required RegionRect rect,
   required int maxEdge,
+  required GradeParamsDto grade,
 }) => RustLib.instance.api.crateApiSimpleRenderRegion(
   handle: handle,
   rect: rect,
   maxEdge: maxEdge,
+  grade: grade,
 );
 
 Future<bool> closeImage({required ImageHandle handle}) =>
@@ -51,10 +55,14 @@ Stream<StripEvent> runTestStrip({
   required ImageHandle handle,
   required RegionRect rect,
   required List<String> models,
+  String? denoiseModel,
+  required GradeParamsDto grade,
 }) => RustLib.instance.api.crateApiSimpleRunTestStrip(
   handle: handle,
   rect: rect,
   models: models,
+  denoiseModel: denoiseModel,
+  grade: grade,
 );
 
 Stream<JobEvent> enqueueExport({required ExportJob job}) =>
@@ -129,6 +137,7 @@ class ExportJob {
   final String device;
   final int? tileSize;
   final int? memoryBudgetMib;
+  final GradeParamsDto grade;
 
   const ExportJob({
     required this.handle,
@@ -139,6 +148,7 @@ class ExportJob {
     required this.device,
     this.tileSize,
     this.memoryBudgetMib,
+    required this.grade,
   });
 
   @override
@@ -150,7 +160,8 @@ class ExportJob {
       srModel.hashCode ^
       device.hashCode ^
       tileSize.hashCode ^
-      memoryBudgetMib.hashCode;
+      memoryBudgetMib.hashCode ^
+      grade.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -164,7 +175,54 @@ class ExportJob {
           srModel == other.srModel &&
           device == other.device &&
           tileSize == other.tileSize &&
-          memoryBudgetMib == other.memoryBudgetMib;
+          memoryBudgetMib == other.memoryBudgetMib &&
+          grade == other.grade;
+}
+
+class GradeParamsDto {
+  final double contrast;
+  final double highlights;
+  final double shadows;
+  final double whites;
+  final double blacks;
+  final double vibrance;
+  final double saturation;
+
+  const GradeParamsDto({
+    required this.contrast,
+    required this.highlights,
+    required this.shadows,
+    required this.whites,
+    required this.blacks,
+    required this.vibrance,
+    required this.saturation,
+  });
+
+  static Future<GradeParamsDto> default_() =>
+      RustLib.instance.api.crateApiSimpleGradeParamsDtoDefault();
+
+  @override
+  int get hashCode =>
+      contrast.hashCode ^
+      highlights.hashCode ^
+      shadows.hashCode ^
+      whites.hashCode ^
+      blacks.hashCode ^
+      vibrance.hashCode ^
+      saturation.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GradeParamsDto &&
+          runtimeType == other.runtimeType &&
+          contrast == other.contrast &&
+          highlights == other.highlights &&
+          shadows == other.shadows &&
+          whites == other.whites &&
+          blacks == other.blacks &&
+          vibrance == other.vibrance &&
+          saturation == other.saturation;
 }
 
 class ImageHandle {
@@ -443,6 +501,7 @@ class RuntimeInfo {
 
 class StripEvent {
   final String model;
+  final bool isReference;
   final String state;
   final double progress;
   final BigInt elapsedMs;
@@ -451,6 +510,7 @@ class StripEvent {
 
   const StripEvent({
     required this.model,
+    required this.isReference,
     required this.state,
     required this.progress,
     required this.elapsedMs,
@@ -461,6 +521,7 @@ class StripEvent {
   @override
   int get hashCode =>
       model.hashCode ^
+      isReference.hashCode ^
       state.hashCode ^
       progress.hashCode ^
       elapsedMs.hashCode ^
@@ -473,6 +534,7 @@ class StripEvent {
       other is StripEvent &&
           runtimeType == other.runtimeType &&
           model == other.model &&
+          isReference == other.isReference &&
           state == other.state &&
           progress == other.progress &&
           elapsedMs == other.elapsedMs &&

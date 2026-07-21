@@ -4,6 +4,139 @@ import 'package:rawsr_gui/src/rust/api/simple.dart';
 
 enum BaseCurveOption { srgb, filmic }
 
+const currentRecipeSchemaVersion = 2;
+
+const gradeMinimum = -100.0;
+const gradeMaximum = 100.0;
+
+class DevelopSettings {
+  const DevelopSettings({
+    this.exposureEv = 0,
+    this.baseCurve = BaseCurveOption.srgb,
+  });
+
+  final double exposureEv;
+  final BaseCurveOption baseCurve;
+
+  DevelopSettings copyWith({double? exposureEv, BaseCurveOption? baseCurve}) {
+    return DevelopSettings(
+      exposureEv: exposureEv ?? this.exposureEv,
+      baseCurve: baseCurve ?? this.baseCurve,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is DevelopSettings &&
+            exposureEv == other.exposureEv &&
+            baseCurve == other.baseCurve;
+  }
+
+  @override
+  int get hashCode => Object.hash(exposureEv, baseCurve);
+}
+
+class GradeSettings {
+  const GradeSettings({
+    this.contrast = 0,
+    this.highlights = 0,
+    this.shadows = 0,
+    this.whites = 0,
+    this.blacks = 0,
+    this.vibrance = 0,
+    this.saturation = 0,
+  });
+
+  final double contrast;
+  final double highlights;
+  final double shadows;
+  final double whites;
+  final double blacks;
+  final double vibrance;
+  final double saturation;
+
+  GradeSettings copyWith({
+    double? contrast,
+    double? highlights,
+    double? shadows,
+    double? whites,
+    double? blacks,
+    double? vibrance,
+    double? saturation,
+  }) {
+    return GradeSettings(
+      contrast: contrast ?? this.contrast,
+      highlights: highlights ?? this.highlights,
+      shadows: shadows ?? this.shadows,
+      whites: whites ?? this.whites,
+      blacks: blacks ?? this.blacks,
+      vibrance: vibrance ?? this.vibrance,
+      saturation: saturation ?? this.saturation,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is GradeSettings &&
+            contrast == other.contrast &&
+            highlights == other.highlights &&
+            shadows == other.shadows &&
+            whites == other.whites &&
+            blacks == other.blacks &&
+            vibrance == other.vibrance &&
+            saturation == other.saturation;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    contrast,
+    highlights,
+    shadows,
+    whites,
+    blacks,
+    vibrance,
+    saturation,
+  );
+}
+
+class EditRecipe {
+  const EditRecipe({
+    this.schemaVersion = currentRecipeSchemaVersion,
+    this.develop = const DevelopSettings(),
+    this.grade = const GradeSettings(),
+  });
+
+  final int schemaVersion;
+  final DevelopSettings develop;
+  final GradeSettings grade;
+
+  EditRecipe copyWith({
+    int? schemaVersion,
+    DevelopSettings? develop,
+    GradeSettings? grade,
+  }) {
+    return EditRecipe(
+      schemaVersion: schemaVersion ?? this.schemaVersion,
+      develop: develop ?? this.develop,
+      grade: grade ?? this.grade,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is EditRecipe &&
+            schemaVersion == other.schemaVersion &&
+            develop == other.develop &&
+            grade == other.grade;
+  }
+
+  @override
+  int get hashCode => Object.hash(schemaVersion, develop, grade);
+}
+
 class LibraryItem {
   const LibraryItem({
     required this.path,
@@ -11,8 +144,8 @@ class LibraryItem {
     this.thumbnail,
     this.loading = true,
     this.error,
-    this.exposureEv = 0,
-    this.baseCurve = BaseCurveOption.srgb,
+    this.recipe = const EditRecipe(),
+    this.recipeRevision = 0,
   });
 
   final String path;
@@ -20,16 +153,22 @@ class LibraryItem {
   final ThumbData? thumbnail;
   final bool loading;
   final String? error;
-  final double exposureEv;
-  final BaseCurveOption baseCurve;
+  final EditRecipe recipe;
+  final int recipeRevision;
+
+  double get exposureEv => recipe.develop.exposureEv;
+
+  BaseCurveOption get baseCurve => recipe.develop.baseCurve;
+
+  GradeSettings get grade => recipe.grade;
 
   LibraryItem copyWith({
     ThumbData? thumbnail,
     bool? loading,
     String? error,
     bool clearError = false,
-    double? exposureEv,
-    BaseCurveOption? baseCurve,
+    EditRecipe? recipe,
+    int? recipeRevision,
   }) {
     return LibraryItem(
       path: path,
@@ -37,8 +176,8 @@ class LibraryItem {
       thumbnail: thumbnail ?? this.thumbnail,
       loading: loading ?? this.loading,
       error: clearError ? null : error ?? this.error,
-      exposureEv: exposureEv ?? this.exposureEv,
-      baseCurve: baseCurve ?? this.baseCurve,
+      recipe: recipe ?? this.recipe,
+      recipeRevision: recipeRevision ?? this.recipeRevision,
     );
   }
 }
@@ -136,11 +275,49 @@ class LibraryController extends StateNotifier<LibraryState> {
   }
 
   void updateExposure(double value) {
-    _updateSelected((item) => item.copyWith(exposureEv: value));
+    if (!value.isFinite) return;
+    _updateRecipe(
+      (recipe) => recipe.copyWith(
+        develop: recipe.develop.copyWith(
+          exposureEv: value.clamp(-4.0, 4.0).toDouble(),
+        ),
+      ),
+    );
   }
 
   void updateBaseCurve(BaseCurveOption curve) {
-    _updateSelected((item) => item.copyWith(baseCurve: curve));
+    _updateRecipe(
+      (recipe) =>
+          recipe.copyWith(develop: recipe.develop.copyWith(baseCurve: curve)),
+    );
+  }
+
+  void updateContrast(double value) {
+    _updateGrade(value, (grade, value) => grade.copyWith(contrast: value));
+  }
+
+  void updateHighlights(double value) {
+    _updateGrade(value, (grade, value) => grade.copyWith(highlights: value));
+  }
+
+  void updateShadows(double value) {
+    _updateGrade(value, (grade, value) => grade.copyWith(shadows: value));
+  }
+
+  void updateWhites(double value) {
+    _updateGrade(value, (grade, value) => grade.copyWith(whites: value));
+  }
+
+  void updateBlacks(double value) {
+    _updateGrade(value, (grade, value) => grade.copyWith(blacks: value));
+  }
+
+  void updateVibrance(double value) {
+    _updateGrade(value, (grade, value) => grade.copyWith(vibrance: value));
+  }
+
+  void updateSaturation(double value) {
+    _updateGrade(value, (grade, value) => grade.copyWith(saturation: value));
   }
 
   void clearMessage() => state = state.copyWith(clearMessage: true);
@@ -168,6 +345,28 @@ class LibraryController extends StateNotifier<LibraryState> {
     final index = state.selectedIndex;
     if (index == null) return;
     _replace(index, update(state.items[index]));
+  }
+
+  void _updateRecipe(EditRecipe Function(EditRecipe recipe) update) {
+    _updateSelected((item) {
+      final recipe = update(item.recipe);
+      if (recipe == item.recipe) return item;
+      return item.copyWith(
+        recipe: recipe,
+        recipeRevision: item.recipeRevision + 1,
+      );
+    });
+  }
+
+  void _updateGrade(
+    double value,
+    GradeSettings Function(GradeSettings grade, double value) update,
+  ) {
+    if (!value.isFinite) return;
+    final clamped = value.clamp(gradeMinimum, gradeMaximum).toDouble();
+    _updateRecipe(
+      (recipe) => recipe.copyWith(grade: update(recipe.grade, clamped)),
+    );
   }
 
   void _replace(int index, LibraryItem item) {

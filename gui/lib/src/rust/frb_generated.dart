@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -2008599849;
+  int get rustContentHash => -1360241032;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -86,6 +86,8 @@ abstract class RustLibApi extends BaseApi {
 
   Future<ThumbData> crateApiSimpleExtractThumb({required String path});
 
+  Future<GradeParamsDto> crateApiSimpleGradeParamsDtoDefault();
+
   Future<ModelEntry> crateApiSimpleImportModel({
     required ImportModelRequest request,
   });
@@ -103,18 +105,22 @@ abstract class RustLibApi extends BaseApi {
   Future<RgbaBytes> crateApiSimpleRenderPreview({
     required ImageHandle handle,
     required int maxEdge,
+    required GradeParamsDto grade,
   });
 
   Future<RgbaBytes> crateApiSimpleRenderRegion({
     required ImageHandle handle,
     required RegionRect rect,
     required int maxEdge,
+    required GradeParamsDto grade,
   });
 
   Stream<StripEvent> crateApiSimpleRunTestStrip({
     required ImageHandle handle,
     required RegionRect rect,
     required List<String> models,
+    String? denoiseModel,
+    required GradeParamsDto grade,
   });
 
   Future<RuntimeInfo> crateApiSimpleRuntimeInfo();
@@ -249,6 +255,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "extract_thumb", argNames: ["path"]);
 
   @override
+  Future<GradeParamsDto> crateApiSimpleGradeParamsDtoDefault() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_grade_params_dto,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSimpleGradeParamsDtoDefaultConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleGradeParamsDtoDefaultConstMeta =>
+      const TaskConstMeta(debugName: "grade_params_dto_default", argNames: []);
+
+  @override
   Future<ModelEntry> crateApiSimpleImportModel({
     required ImportModelRequest request,
   }) {
@@ -260,7 +293,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 6,
             port: port_,
           );
         },
@@ -287,7 +320,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -314,7 +347,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 8,
             port: port_,
           );
         },
@@ -348,7 +381,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 9,
             port: port_,
           );
         },
@@ -372,6 +405,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<RgbaBytes> crateApiSimpleRenderPreview({
     required ImageHandle handle,
     required int maxEdge,
+    required GradeParamsDto grade,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -379,43 +413,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_box_autoadd_image_handle(handle, serializer);
           sse_encode_u_32(maxEdge, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 9,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_rgba_bytes,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kCrateApiSimpleRenderPreviewConstMeta,
-        argValues: [handle, maxEdge],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiSimpleRenderPreviewConstMeta =>
-      const TaskConstMeta(
-        debugName: "render_preview",
-        argNames: ["handle", "maxEdge"],
-      );
-
-  @override
-  Future<RgbaBytes> crateApiSimpleRenderRegion({
-    required ImageHandle handle,
-    required RegionRect rect,
-    required int maxEdge,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_box_autoadd_image_handle(handle, serializer);
-          sse_encode_box_autoadd_region_rect(rect, serializer);
-          sse_encode_u_32(maxEdge, serializer);
+          sse_encode_box_autoadd_grade_params_dto(grade, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -427,8 +425,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_rgba_bytes,
           decodeErrorData: sse_decode_String,
         ),
+        constMeta: kCrateApiSimpleRenderPreviewConstMeta,
+        argValues: [handle, maxEdge, grade],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSimpleRenderPreviewConstMeta =>
+      const TaskConstMeta(
+        debugName: "render_preview",
+        argNames: ["handle", "maxEdge", "grade"],
+      );
+
+  @override
+  Future<RgbaBytes> crateApiSimpleRenderRegion({
+    required ImageHandle handle,
+    required RegionRect rect,
+    required int maxEdge,
+    required GradeParamsDto grade,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_image_handle(handle, serializer);
+          sse_encode_box_autoadd_region_rect(rect, serializer);
+          sse_encode_u_32(maxEdge, serializer);
+          sse_encode_box_autoadd_grade_params_dto(grade, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_rgba_bytes,
+          decodeErrorData: sse_decode_String,
+        ),
         constMeta: kCrateApiSimpleRenderRegionConstMeta,
-        argValues: [handle, rect, maxEdge],
+        argValues: [handle, rect, maxEdge, grade],
         apiImpl: this,
       ),
     );
@@ -436,7 +473,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiSimpleRenderRegionConstMeta => const TaskConstMeta(
     debugName: "render_region",
-    argNames: ["handle", "rect", "maxEdge"],
+    argNames: ["handle", "rect", "maxEdge", "grade"],
   );
 
   @override
@@ -444,6 +481,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     required ImageHandle handle,
     required RegionRect rect,
     required List<String> models,
+    String? denoiseModel,
+    required GradeParamsDto grade,
   }) {
     final sink = RustStreamSink<StripEvent>();
     unawaited(
@@ -454,11 +493,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             sse_encode_box_autoadd_image_handle(handle, serializer);
             sse_encode_box_autoadd_region_rect(rect, serializer);
             sse_encode_list_String(models, serializer);
+            sse_encode_opt_String(denoiseModel, serializer);
+            sse_encode_box_autoadd_grade_params_dto(grade, serializer);
             sse_encode_StreamSink_strip_event_Sse(sink, serializer);
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 11,
+              funcId: 12,
               port: port_,
             );
           },
@@ -467,7 +508,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             decodeErrorData: sse_decode_String,
           ),
           constMeta: kCrateApiSimpleRunTestStripConstMeta,
-          argValues: [handle, rect, models, sink],
+          argValues: [handle, rect, models, denoiseModel, grade, sink],
           apiImpl: this,
         ),
       ),
@@ -477,7 +518,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiSimpleRunTestStripConstMeta => const TaskConstMeta(
     debugName: "run_test_strip",
-    argNames: ["handle", "rect", "models", "sink"],
+    argNames: ["handle", "rect", "models", "denoiseModel", "grade", "sink"],
   );
 
   @override
@@ -489,7 +530,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 13,
             port: port_,
           );
         },
@@ -552,6 +593,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GradeParamsDto dco_decode_box_autoadd_grade_params_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_grade_params_dto(raw);
+  }
+
+  @protected
   ImageHandle dco_decode_box_autoadd_image_handle(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_image_handle(raw);
@@ -610,8 +657,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ExportJob dco_decode_export_job(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return ExportJob(
       handle: dco_decode_image_handle(arr[0]),
       outputPath: dco_decode_String(arr[1]),
@@ -621,6 +668,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       device: dco_decode_String(arr[5]),
       tileSize: dco_decode_opt_box_autoadd_u_32(arr[6]),
       memoryBudgetMib: dco_decode_opt_box_autoadd_u_32(arr[7]),
+      grade: dco_decode_grade_params_dto(arr[8]),
     );
   }
 
@@ -628,6 +676,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double dco_decode_f_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
+  }
+
+  @protected
+  GradeParamsDto dco_decode_grade_params_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return GradeParamsDto(
+      contrast: dco_decode_f_32(arr[0]),
+      highlights: dco_decode_f_32(arr[1]),
+      shadows: dco_decode_f_32(arr[2]),
+      whites: dco_decode_f_32(arr[3]),
+      blacks: dco_decode_f_32(arr[4]),
+      vibrance: dco_decode_f_32(arr[5]),
+      saturation: dco_decode_f_32(arr[6]),
+    );
   }
 
   @protected
@@ -816,15 +881,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   StripEvent dco_decode_strip_event(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return StripEvent(
       model: dco_decode_String(arr[0]),
-      state: dco_decode_String(arr[1]),
-      progress: dco_decode_f_32(arr[2]),
-      elapsedMs: dco_decode_u_64(arr[3]),
-      image: dco_decode_opt_box_autoadd_rgba_bytes(arr[4]),
-      reason: dco_decode_opt_String(arr[5]),
+      isReference: dco_decode_bool(arr[1]),
+      state: dco_decode_String(arr[2]),
+      progress: dco_decode_f_32(arr[3]),
+      elapsedMs: dco_decode_u_64(arr[4]),
+      image: dco_decode_opt_box_autoadd_rgba_bytes(arr[5]),
+      reason: dco_decode_opt_String(arr[6]),
     );
   }
 
@@ -921,6 +987,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GradeParamsDto sse_decode_box_autoadd_grade_params_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_grade_params_dto(deserializer));
+  }
+
+  @protected
   ImageHandle sse_decode_box_autoadd_image_handle(
     SseDeserializer deserializer,
   ) {
@@ -996,6 +1070,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_device = sse_decode_String(deserializer);
     var var_tileSize = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_memoryBudgetMib = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_grade = sse_decode_grade_params_dto(deserializer);
     return ExportJob(
       handle: var_handle,
       outputPath: var_outputPath,
@@ -1005,6 +1080,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       device: var_device,
       tileSize: var_tileSize,
       memoryBudgetMib: var_memoryBudgetMib,
+      grade: var_grade,
     );
   }
 
@@ -1012,6 +1088,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double sse_decode_f_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getFloat32();
+  }
+
+  @protected
+  GradeParamsDto sse_decode_grade_params_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_contrast = sse_decode_f_32(deserializer);
+    var var_highlights = sse_decode_f_32(deserializer);
+    var var_shadows = sse_decode_f_32(deserializer);
+    var var_whites = sse_decode_f_32(deserializer);
+    var var_blacks = sse_decode_f_32(deserializer);
+    var var_vibrance = sse_decode_f_32(deserializer);
+    var var_saturation = sse_decode_f_32(deserializer);
+    return GradeParamsDto(
+      contrast: var_contrast,
+      highlights: var_highlights,
+      shadows: var_shadows,
+      whites: var_whites,
+      blacks: var_blacks,
+      vibrance: var_vibrance,
+      saturation: var_saturation,
+    );
   }
 
   @protected
@@ -1261,6 +1358,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   StripEvent sse_decode_strip_event(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_model = sse_decode_String(deserializer);
+    var var_isReference = sse_decode_bool(deserializer);
     var var_state = sse_decode_String(deserializer);
     var var_progress = sse_decode_f_32(deserializer);
     var var_elapsedMs = sse_decode_u_64(deserializer);
@@ -1268,6 +1366,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_reason = sse_decode_opt_String(deserializer);
     return StripEvent(
       model: var_model,
+      isReference: var_isReference,
       state: var_state,
       progress: var_progress,
       elapsedMs: var_elapsedMs,
@@ -1397,6 +1496,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_grade_params_dto(
+    GradeParamsDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_grade_params_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_image_handle(
     ImageHandle self,
     SseSerializer serializer,
@@ -1469,12 +1577,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.device, serializer);
     sse_encode_opt_box_autoadd_u_32(self.tileSize, serializer);
     sse_encode_opt_box_autoadd_u_32(self.memoryBudgetMib, serializer);
+    sse_encode_grade_params_dto(self.grade, serializer);
   }
 
   @protected
   void sse_encode_f_32(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putFloat32(self);
+  }
+
+  @protected
+  void sse_encode_grade_params_dto(
+    GradeParamsDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_32(self.contrast, serializer);
+    sse_encode_f_32(self.highlights, serializer);
+    sse_encode_f_32(self.shadows, serializer);
+    sse_encode_f_32(self.whites, serializer);
+    sse_encode_f_32(self.blacks, serializer);
+    sse_encode_f_32(self.vibrance, serializer);
+    sse_encode_f_32(self.saturation, serializer);
   }
 
   @protected
@@ -1678,6 +1802,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_strip_event(StripEvent self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.model, serializer);
+    sse_encode_bool(self.isReference, serializer);
     sse_encode_String(self.state, serializer);
     sse_encode_f_32(self.progress, serializer);
     sse_encode_u_64(self.elapsedMs, serializer);

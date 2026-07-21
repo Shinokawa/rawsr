@@ -6,22 +6,37 @@ final modelsProvider = FutureProvider<List<ModelEntry>>((ref) {
   return ref.watch(rawsrBackendProvider).listModels();
 });
 
-class SelectedModelsController extends StateNotifier<Set<String>> {
-  SelectedModelsController() : super(<String>{});
+class SelectedModelsState {
+  const SelectedModelsState({
+    this.denoise = const <String>{},
+    this.sr = const <String>{},
+  });
 
-  void toggle(String name) {
-    if (state.contains(name)) {
-      state = <String>{...state}..remove(name);
-      return;
-    }
-    if (state.length >= 4) return;
-    state = <String>{...state, name};
+  final Set<String> denoise;
+  final Set<String> sr;
+
+  Set<String> forKind(String kind) => kind == 'sr' ? sr : denoise;
+
+  SelectedModelsState withKind(String kind, Set<String> models) {
+    final value = Set<String>.unmodifiable(models);
+    return kind == 'sr'
+        ? SelectedModelsState(denoise: denoise, sr: value)
+        : SelectedModelsState(denoise: value, sr: sr);
   }
+}
 
-  void chooseOnly(String name) => state = <String>{name};
+class SelectedModelsController extends StateNotifier<SelectedModelsState> {
+  SelectedModelsController() : super(const SelectedModelsState());
+
+  void toggle(String kind, String name) {
+    final selected = state.forKind(kind).contains(name)
+        ? <String>{}
+        : <String>{name};
+    state = state.withKind(kind, selected);
+  }
 }
 
 final selectedModelsProvider =
-    StateNotifierProvider<SelectedModelsController, Set<String>>(
+    StateNotifierProvider<SelectedModelsController, SelectedModelsState>(
       (ref) => SelectedModelsController(),
     );

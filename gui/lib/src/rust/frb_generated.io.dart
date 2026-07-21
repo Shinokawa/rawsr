@@ -40,6 +40,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_box_autoadd_f_32(dynamic raw);
 
   @protected
+  GradeParamsDto dco_decode_box_autoadd_grade_params_dto(dynamic raw);
+
+  @protected
   ImageHandle dco_decode_box_autoadd_image_handle(dynamic raw);
 
   @protected
@@ -65,6 +68,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double dco_decode_f_32(dynamic raw);
+
+  @protected
+  GradeParamsDto dco_decode_grade_params_dto(dynamic raw);
 
   @protected
   ImageHandle dco_decode_image_handle(dynamic raw);
@@ -167,6 +173,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_box_autoadd_f_32(SseDeserializer deserializer);
 
   @protected
+  GradeParamsDto sse_decode_box_autoadd_grade_params_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ImageHandle sse_decode_box_autoadd_image_handle(SseDeserializer deserializer);
 
   @protected
@@ -194,6 +205,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double sse_decode_f_32(SseDeserializer deserializer);
+
+  @protected
+  GradeParamsDto sse_decode_grade_params_dto(SseDeserializer deserializer);
 
   @protected
   ImageHandle sse_decode_image_handle(SseDeserializer deserializer);
@@ -317,6 +331,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_f_32(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_grade_params_dto(
+    GradeParamsDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_image_handle(
     ImageHandle self,
     SseSerializer serializer,
@@ -354,6 +374,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_f_32(double self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_grade_params_dto(
+    GradeParamsDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_image_handle(ImageHandle self, SseSerializer serializer);

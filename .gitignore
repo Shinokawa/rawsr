@@ -5,6 +5,8 @@
 /models/source/
 /artifacts/spandrel-src/
 /artifacts/bench/
+/artifacts/immich-raw/
+/dist/
 /.venv/
 __pycache__/
 *.pyc

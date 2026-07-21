@@ -11,7 +11,10 @@ use tiff::tags::Tag;
 
 use crate::develop::SrgbImage;
 use crate::infer::Restorer;
-use crate::tile::{Rect, RowBandSink, TileOptions, process_tiled_with_options};
+use crate::tile::{
+    IdentityPixelTransform, PixelTransform, Rect, RowBandSink, TileOptions,
+    process_tiled_with_options_and_transform,
+};
 
 const BIG_TIFF_THRESHOLD: u64 = 4_000_000_000;
 const SRGB_ICC_BASE64: &str = "AAACTGxjbXMEQAAAbW50clJHQiBYWVogB+oABwAQABIAFgAjYWNzcE1TRlQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPbWAAEAAAAA0y1sY21zAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALZGVzYwAAAQgAAAA2Y3BydAAAAUAAAABMd3RwdAAAAYwAAAAUY2hhZAAAAaAAAAAsclhZWgAAAcwAAAAUYlhZWgAAAeAAAAAUZ1hZWgAAAfQAAAAUclRSQwAAAggAAAAgZ1RSQwAAAggAAAAgYlRSQwAAAggAAAAgY2hybQAAAigAAAAkbWx1YwAAAAAAAAABAAAADGVuVVMAAAAaAAAAHABzAFIARwBCACAAYgB1AGkAbAB0AC0AaQBuAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAADAAAAAcAE4AbwAgAGMAbwBwAHkAcgBpAGcAaAB0ACwAIAB1AHMAZQAgAGYAcgBlAGUAbAB5WFlaIAAAAAAAAPbWAAEAAAAA0y1zZjMyAAAAAAABDEIAAAXe///zJQAAB5MAAP2Q///7of///aIAAAPcAADAblhZWiAAAAAAAABvoAAAOPUAAAOQWFlaIAAAAAAAACSfAAAPhAAAtsNYWVogAAAAAAAAYpcAALeHAAAY2XBhcmEAAAAAAAMAAAACZmYAAPKnAAANWQAAE9AAAApbY2hybQAAAAAAAwAAAACj1wAAVHsAAEzNAACZmgAAJmYAAA9c";
@@ -134,8 +137,16 @@ pub fn choose_tiff_container(width: usize, height: usize) -> TiffContainer {
 }
 
 pub fn write_srgb16_tiff(path: &Path, image: &SrgbImage) -> Result<TiffContainer> {
+    write_srgb16_tiff_with_transform(path, image, &IdentityPixelTransform)
+}
+
+pub fn write_srgb16_tiff_with_transform<T: PixelTransform + ?Sized>(
+    path: &Path,
+    image: &SrgbImage,
+    transform: &T,
+) -> Result<TiffContainer> {
     let container = choose_tiff_container(image.w, image.h);
-    write_srgb16_tiff_as(path, image, container)?;
+    write_srgb16_tiff_as_with_transform(path, image, container, transform)?;
     Ok(container)
 }
 
@@ -143,6 +154,15 @@ pub fn write_srgb16_tiff_as(
     path: &Path,
     image: &SrgbImage,
     container: TiffContainer,
+) -> Result<()> {
+    write_srgb16_tiff_as_with_transform(path, image, container, &IdentityPixelTransform)
+}
+
+pub fn write_srgb16_tiff_as_with_transform<T: PixelTransform + ?Sized>(
+    path: &Path,
+    image: &SrgbImage,
+    container: TiffContainer,
+    transform: &T,
 ) -> Result<()> {
     anyhow::ensure!(
         image.w > 0 && image.h > 0,
@@ -158,12 +178,12 @@ pub fn write_srgb16_tiff_as(
     match container {
         TiffContainer::Standard => {
             let encoder = TiffEncoder::new(file).context("failed to initialize TIFF encoder")?;
-            encode_srgb16(encoder, image)
+            encode_srgb16(encoder, image, transform)
         }
         TiffContainer::Big => {
             let encoder =
                 TiffEncoder::new_big(file).context("failed to initialize BigTIFF encoder")?;
-            encode_srgb16(encoder, image)
+            encode_srgb16(encoder, image, transform)
         }
     }
     .with_context(|| format!("failed to write TIFF {}", path.display()))
@@ -175,6 +195,26 @@ pub fn restore_tiled_to_tiff(
     restorer: &dyn Restorer,
     crop: Option<Rect>,
     options: TileOptions,
+    progress: &dyn Fn(f32),
+) -> Result<TiffContainer> {
+    restore_tiled_to_tiff_with_transform(
+        path,
+        source,
+        restorer,
+        crop,
+        options,
+        &IdentityPixelTransform,
+        progress,
+    )
+}
+
+pub fn restore_tiled_to_tiff_with_transform<T: PixelTransform + ?Sized>(
+    path: &Path,
+    source: &SrgbImage,
+    restorer: &dyn Restorer,
+    crop: Option<Rect>,
+    options: TileOptions,
+    transform: &T,
     progress: &dyn Fn(f32),
 ) -> Result<TiffContainer> {
     let crop = crop.unwrap_or(Rect {
@@ -202,22 +242,43 @@ pub fn restore_tiled_to_tiff(
             let mut encoder =
                 TiffEncoder::new(file).context("failed to initialize TIFF encoder")?;
             let mut sink = TiffBandSink::new(&mut encoder, output_w, output_h)?;
-            process_tiled_with_options(source, restorer, Some(crop), options, &mut sink, progress)?;
+            process_tiled_with_options_and_transform(
+                source,
+                restorer,
+                Some(crop),
+                options,
+                transform,
+                &mut sink,
+                progress,
+            )?;
         }
         TiffContainer::Big => {
             let mut encoder =
                 TiffEncoder::new_big(file).context("failed to initialize BigTIFF encoder")?;
             let mut sink = TiffBandSink::new(&mut encoder, output_w, output_h)?;
-            process_tiled_with_options(source, restorer, Some(crop), options, &mut sink, progress)?;
+            process_tiled_with_options_and_transform(
+                source,
+                restorer,
+                Some(crop),
+                options,
+                transform,
+                &mut sink,
+                progress,
+            )?;
         }
     }
     Ok(container)
 }
 
-fn encode_srgb16<W, K>(mut encoder: TiffEncoder<W, K>, source: &SrgbImage) -> Result<()>
+fn encode_srgb16<W, K, T>(
+    mut encoder: TiffEncoder<W, K>,
+    source: &SrgbImage,
+    transform: &T,
+) -> Result<()>
 where
     W: Write + Seek,
     K: TiffKind,
+    T: PixelTransform + ?Sized,
 {
     let width = u32::try_from(source.w).context("TIFF width exceeds u32")?;
     let height = u32::try_from(source.h).context("TIFF height exceeds u32")?;
@@ -234,8 +295,8 @@ where
             .checked_add(sample_count)
             .context("strip source range overflowed")?;
         let strip = source.data[source_offset..end]
-            .iter()
-            .copied()
+            .chunks_exact(3)
+            .flat_map(|pixel| transform.transform_rgb([pixel[0], pixel[1], pixel[2]]))
             .map(quantize_u16)
             .collect::<Vec<_>>();
         image.write_strip(&strip)?;

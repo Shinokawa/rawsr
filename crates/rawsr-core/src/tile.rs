@@ -50,6 +50,29 @@ pub trait RowBandSink {
     fn finish(&mut self) -> Result<()>;
 }
 
+/// Transforms a blended display-referred RGB pixel before output quantization.
+pub trait PixelTransform {
+    fn transform_rgb(&self, rgb: [f32; 3]) -> [f32; 3];
+}
+
+impl<F> PixelTransform for F
+where
+    F: Fn([f32; 3]) -> [f32; 3] + ?Sized,
+{
+    fn transform_rgb(&self, rgb: [f32; 3]) -> [f32; 3] {
+        self(rgb)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IdentityPixelTransform;
+
+impl PixelTransform for IdentityPixelTransform {
+    fn transform_rgb(&self, rgb: [f32; 3]) -> [f32; 3] {
+        rgb
+    }
+}
+
 pub fn restore_tiled_to_image(
     image: &SrgbImage,
     restorer: &dyn Restorer,
@@ -57,12 +80,32 @@ pub fn restore_tiled_to_image(
     options: TileOptions,
     progress: &dyn Fn(f32),
 ) -> Result<SrgbImage> {
+    restore_tiled_to_image_with_transform(
+        image,
+        restorer,
+        crop,
+        options,
+        &IdentityPixelTransform,
+        progress,
+    )
+}
+
+pub fn restore_tiled_to_image_with_transform<T: PixelTransform + ?Sized>(
+    image: &SrgbImage,
+    restorer: &dyn Restorer,
+    crop: Option<Rect>,
+    options: TileOptions,
+    transform: &T,
+    progress: &dyn Fn(f32),
+) -> Result<SrgbImage> {
     ensure!(
         restorer.scale() == 1,
         "in-memory tiled output is restricted to scale-1 restoration; super-resolution must stream to a row-band sink"
     );
     let mut sink = ImageBufferSink::default();
-    process_tiled_with_options(image, restorer, crop, options, &mut sink, progress)?;
+    process_tiled_with_options_and_transform(
+        image, restorer, crop, options, transform, &mut sink, progress,
+    )?;
     let data = sink
         .data
         .into_iter()
@@ -77,6 +120,26 @@ pub fn restore_tiled_to_preview(
     crop: Option<Rect>,
     options: TileOptions,
     max_output_pixels: usize,
+    progress: &dyn Fn(f32),
+) -> Result<SrgbImage> {
+    restore_tiled_to_preview_with_transform(
+        image,
+        restorer,
+        crop,
+        options,
+        max_output_pixels,
+        &IdentityPixelTransform,
+        progress,
+    )
+}
+
+pub fn restore_tiled_to_preview_with_transform<T: PixelTransform + ?Sized>(
+    image: &SrgbImage,
+    restorer: &dyn Restorer,
+    crop: Option<Rect>,
+    options: TileOptions,
+    max_output_pixels: usize,
+    transform: &T,
     progress: &dyn Fn(f32),
 ) -> Result<SrgbImage> {
     ensure!(
@@ -100,7 +163,9 @@ pub fn restore_tiled_to_preview(
         "preview output has {output_pixels} pixels, exceeding limit {max_output_pixels}"
     );
     let mut sink = ImageBufferSink::default();
-    process_tiled_with_options(image, restorer, crop, options, &mut sink, progress)?;
+    process_tiled_with_options_and_transform(
+        image, restorer, crop, options, transform, &mut sink, progress,
+    )?;
     let data = sink
         .data
         .into_iter()
@@ -159,22 +224,61 @@ pub fn process_tiled(
     sink: &mut dyn RowBandSink,
     progress: &dyn Fn(f32),
 ) -> Result<()> {
-    process_tiled_with_options(
+    process_tiled_with_transform(
+        image,
+        restorer,
+        crop,
+        &IdentityPixelTransform,
+        sink,
+        progress,
+    )
+}
+
+pub fn process_tiled_with_transform<T: PixelTransform + ?Sized>(
+    image: &SrgbImage,
+    restorer: &dyn Restorer,
+    crop: Option<Rect>,
+    transform: &T,
+    sink: &mut dyn RowBandSink,
+    progress: &dyn Fn(f32),
+) -> Result<()> {
+    process_tiled_with_options_and_transform(
         image,
         restorer,
         crop,
         TileOptions::default(),
+        transform,
+        sink,
+        progress,
+    )
+}
+
+pub fn process_tiled_with_options(
+    image: &SrgbImage,
+    restorer: &dyn Restorer,
+    crop: Option<Rect>,
+    options: TileOptions,
+    sink: &mut dyn RowBandSink,
+    progress: &dyn Fn(f32),
+) -> Result<()> {
+    process_tiled_with_options_and_transform(
+        image,
+        restorer,
+        crop,
+        options,
+        &IdentityPixelTransform,
         sink,
         progress,
     )
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn process_tiled_with_options(
+pub fn process_tiled_with_options_and_transform<T: PixelTransform + ?Sized>(
     image: &SrgbImage,
     restorer: &dyn Restorer,
     crop: Option<Rect>,
     options: TileOptions,
+    transform: &T,
     sink: &mut dyn RowBandSink,
     progress: &dyn Fn(f32),
 ) -> Result<()> {
@@ -294,6 +398,7 @@ pub fn process_tiled_with_options(
             ring_rows,
             &mut accum,
             &mut weights,
+            transform,
             sink,
         )?;
         flushed_y = flush_end;
@@ -457,13 +562,15 @@ fn feather_weight(
     1.0
 }
 
-fn flush_rows(
+#[allow(clippy::too_many_arguments)]
+fn flush_rows<T: PixelTransform + ?Sized>(
     start_y: usize,
     end_y: usize,
     output_width: usize,
     ring_rows: usize,
     accum: &mut [f32],
     weights: &mut [f32],
+    transform: &T,
     sink: &mut dyn RowBandSink,
 ) -> Result<()> {
     const WRITE_ROWS: usize = 16;
@@ -480,9 +587,12 @@ fn flush_rows(
                     "output pixel {x},{global_y} has invalid blend weight {weight}"
                 );
                 let offset = weight_index * 3;
-                band.push(quantize_u16(accum[offset] / weight));
-                band.push(quantize_u16(accum[offset + 1] / weight));
-                band.push(quantize_u16(accum[offset + 2] / weight));
+                let transformed = transform.transform_rgb([
+                    accum[offset] / weight,
+                    accum[offset + 1] / weight,
+                    accum[offset + 2] / weight,
+                ]);
+                band.extend(transformed.into_iter().map(quantize_u16));
                 accum[offset..offset + 3].fill(0.0);
                 weights[weight_index] = 0.0;
             }
@@ -507,6 +617,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::grade::{GradeParams, grade_image};
     use crate::infer::TileHint;
 
     struct Nearest2x;
@@ -672,5 +783,47 @@ mod tests {
     fn memory_budget_reduces_tile_height_without_breaking_overlap() {
         let chosen = fit_tile_size_to_budget(512, 32, 16_000, 4, Some(256 * 1024 * 1024)).unwrap();
         assert!((65..512).contains(&chosen));
+    }
+
+    #[test]
+    fn streaming_transform_matches_in_memory_grading() {
+        let image = gradient(131, 97);
+        let params = GradeParams {
+            contrast: 0.35,
+            highlights: -0.2,
+            shadows: 0.25,
+            whites: 0.1,
+            blacks: -0.15,
+            vibrance: 0.4,
+            saturation: 0.2,
+        };
+        let expected = grade_image(&image, &params);
+        let mut sink = VecSink::default();
+        process_tiled_with_options_and_transform(
+            &image,
+            &Identity,
+            None,
+            TileOptions {
+                tile_size: Some(48),
+                overlap: Some(8),
+                memory_budget_bytes: None,
+            },
+            &params,
+            &mut sink,
+            &|_| {},
+        )
+        .unwrap();
+
+        for (actual, expected) in sink
+            .data
+            .iter()
+            .copied()
+            .zip(expected.data.iter().copied().map(quantize_u16))
+        {
+            assert!(
+                actual.abs_diff(expected) <= 1,
+                "streaming sample {actual} differed from in-memory {expected}"
+            );
+        }
     }
 }

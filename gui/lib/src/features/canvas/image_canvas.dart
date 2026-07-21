@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:rawsr_gui/src/features/canvas/canvas_controller.dart';
+import 'package:rawsr_gui/src/features/canvas/crop_interaction.dart';
 import 'package:rawsr_gui/src/features/canvas/viewport_transform.dart';
 import 'package:rawsr_gui/src/rust/api/simple.dart';
 import 'package:rawsr_gui/src/theme/rawsr_theme.dart';
@@ -22,7 +23,7 @@ class _ImageCanvasState extends ConsumerState<ImageCanvas> {
   double _startZoom = 1;
   Offset _startPan = Offset.zero;
   Offset _startFocal = Offset.zero;
-  Offset? _cropStart;
+  CropDragSession? _cropDrag;
 
   @override
   Widget build(BuildContext context) {
@@ -54,9 +55,7 @@ class _ImageCanvasState extends ConsumerState<ImageCanvas> {
                         _scaleStart(details, state, transform),
                     onScaleUpdate: (details) =>
                         _scaleUpdate(details, state, transform),
-                    onScaleEnd: (_) => ref
-                        .read(canvasProvider.notifier)
-                        .requestVisibleRegion(_currentTransform(viewportSize)),
+                    onScaleEnd: (_) => _scaleEnd(state, viewportSize),
                     child: _DecodedCanvas(
                       preview: state.preview,
                       region: state.region,
@@ -151,9 +150,15 @@ class _ImageCanvasState extends ConsumerState<ImageCanvas> {
     _startZoom = state.zoom;
     _startPan = state.pan;
     _startFocal = details.localFocalPoint;
-    _cropStart = state.cropMode
-        ? transform.viewportToImage(details.localFocalPoint)
-        : null;
+    _cropDrag = null;
+    if (state.cropMode &&
+        transform.imageRect.contains(details.localFocalPoint)) {
+      _cropDrag = beginCropDrag(
+        crop: state.crop,
+        viewportPoint: details.localFocalPoint,
+        transform: transform,
+      );
+    }
   }
 
   void _scaleUpdate(
@@ -162,15 +167,33 @@ class _ImageCanvasState extends ConsumerState<ImageCanvas> {
     ViewportTransform transform,
   ) {
     final controller = ref.read(canvasProvider.notifier);
-    if (state.cropMode && _cropStart != null) {
-      final current = transform.viewportToImage(details.localFocalPoint);
-      controller.setCrop(Rect.fromPoints(_cropStart!, current));
+    if (state.cropMode) {
+      final cropDrag = _cropDrag;
+      if (cropDrag != null) {
+        controller.setCrop(
+          cropDrag.update(
+            viewportPoint: details.localFocalPoint,
+            transform: transform,
+          ),
+        );
+      }
       return;
     }
     controller.setView(
       zoom: _startZoom * details.scale,
       pan: _startPan + details.localFocalPoint - _startFocal,
     );
+  }
+
+  void _scaleEnd(CanvasState state, Size viewportSize) {
+    _cropDrag = null;
+    if (!state.cropMode) {
+      unawaited(
+        ref
+            .read(canvasProvider.notifier)
+            .requestVisibleRegion(_currentTransform(viewportSize)),
+      );
+    }
   }
 
   void _handleScroll(
@@ -237,13 +260,22 @@ class _CanvasToolbar extends ConsumerWidget {
         ),
         const SizedBox(width: 6),
         RawsrButton(
-          label: '判色',
+          label: '中性灰背景',
           shortcut: 'L',
           kind: state.grayMode
               ? RawsrButtonKind.primary
               : RawsrButtonKind.secondary,
           onPressed: controller.toggleGrayMode,
         ),
+        if (state.crop != null) ...<Widget>[
+          const SizedBox(width: 6),
+          RawsrButton(
+            label: '清除选区',
+            icon: Icons.close,
+            kind: RawsrButtonKind.secondary,
+            onPressed: () => controller.setCrop(null),
+          ),
+        ],
         const SizedBox(width: 6),
         RawsrButton(
           label: '适合窗口',
@@ -375,16 +407,19 @@ class _DecodedCanvasState extends State<_DecodedCanvas> {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _ImagePainter(
-        preview: _preview,
-        region: _region,
-        regionRect: widget.regionRect,
-        transform: widget.transform,
-        crop: widget.crop,
-        palette: context.palette,
+    return ClipRect(
+      key: const ValueKey<String>('canvas-paint-clip'),
+      child: CustomPaint(
+        painter: _ImagePainter(
+          preview: _preview,
+          region: _region,
+          regionRect: widget.regionRect,
+          transform: widget.transform,
+          crop: widget.crop,
+          palette: context.palette,
+        ),
+        child: const SizedBox.expand(),
       ),
-      child: const SizedBox.expand(),
     );
   }
 }
