@@ -2,10 +2,6 @@
 
 `rawsr` 是本地 GPU 加速的 RAW 降噪与超分工具，包含 Rust CLI/Core 和 Flutter 桌面 GUI。固定管线为：解码 → 显影 → 降噪 → 选区优先超分 → 调色 → 16-bit TIFF 导出。
 
-实现依据与验收约束见：
-
-- [后端任务书](docs/backend-task-v1.md)
-- [Flutter 桌面前端任务书](docs/frontend-task-v1.md)
 
 ## 环境
 
