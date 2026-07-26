@@ -43,6 +43,7 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
       : null;
   var selectedArea = canvas.crop != null;
   var device = 'auto';
+  var outputFormat = 'jpeg';
 
   final confirmed = await showDialog<bool>(
     context: context,
@@ -133,6 +134,48 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
                     onChanged: (value) =>
                         setState(() => device = value ?? 'auto'),
                   ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: outputFormat,
+                    decoration: const InputDecoration(labelText: '导出格式'),
+                    items: const <DropdownMenuItem<String>>[
+                      DropdownMenuItem(
+                        value: 'jpeg',
+                        child: Text('JPEG 交付版（质量 92，最长边 12000px）'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'tiff',
+                        child: Text('16 位 TIFF 母版（原生尺寸）'),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => outputFormat = value ?? 'jpeg'),
+                  ),
+                  const SizedBox(height: 6),
+                  Builder(
+                    builder: (context) {
+                      final sourceWidth = selectedArea && canvas.crop != null
+                          ? canvas.crop!.width.ceil()
+                          : canvas.handle!.width;
+                      final sourceHeight = selectedArea && canvas.crop != null
+                          ? canvas.crop!.height.ceil()
+                          : canvas.handle!.height;
+                      final scale = _scaleForModel(sr, installedSr);
+                      final nativeWidth = sourceWidth * scale;
+                      final nativeHeight = sourceHeight * scale;
+                      final delivered = _fitDimensions(
+                        nativeWidth,
+                        nativeHeight,
+                        12000,
+                      );
+                      return Text(
+                        outputFormat == 'jpeg'
+                            ? '交付尺寸：${delivered.$1} × ${delivered.$2}（模型原生：$nativeWidth × $nativeHeight）'
+                            : '母版尺寸：$nativeWidth × $nativeHeight；全尺寸超分文件会很大。',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      );
+                    },
+                  ),
                   if (canvas.crop != null) ...<Widget>[
                     const SizedBox(height: 8),
                     SwitchListTile(
@@ -185,19 +228,25 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
     label: '16 位 TIFF',
     extensions: <String>['tif', 'tiff'],
   );
+  final outputGroup = outputFormat == 'jpeg'
+      ? const XTypeGroup(label: 'JPEG', extensions: <String>['jpg', 'jpeg'])
+      : tiffGroup;
   final stem = item.name.contains('.')
       ? item.name.substring(0, item.name.lastIndexOf('.'))
       : item.name;
   final location = await getSaveLocation(
-    acceptedTypeGroups: const <XTypeGroup>[tiffGroup],
-    suggestedName: '${stem}_rawsr.tiff',
+    acceptedTypeGroups: <XTypeGroup>[outputGroup],
+    suggestedName: '${stem}_rawsr.${outputFormat == 'jpeg' ? 'jpg' : 'tiff'}',
     confirmButtonText: '加入队列',
   );
   if (location == null) return;
   final lower = location.path.toLowerCase();
-  final outputPath = lower.endsWith('.tif') || lower.endsWith('.tiff')
+  final hasExtension = outputFormat == 'jpeg'
+      ? lower.endsWith('.jpg') || lower.endsWith('.jpeg')
+      : lower.endsWith('.tif') || lower.endsWith('.tiff');
+  final outputPath = hasExtension
       ? location.path
-      : '${location.path}.tiff';
+      : '${location.path}.${outputFormat == 'jpeg' ? 'jpg' : 'tiff'}';
   final crop = selectedArea && canvas.crop != null
       ? _regionFromRect(canvas.crop!, canvas.handle!)
       : null;
@@ -208,6 +257,9 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
   final job = ExportJob(
     handle: canvas.handle!,
     outputPath: outputPath,
+    outputFormat: outputFormat,
+    jpegQuality: outputFormat == 'jpeg' ? 92 : null,
+    maxOutputEdge: outputFormat == 'jpeg' ? 12000 : null,
     crop: crop,
     denoiseModel: denoise,
     srModel: sr,
@@ -231,6 +283,20 @@ RegionRect _regionFromRect(Rect rect, ImageHandle handle) {
   final width = rect.width.ceil().clamp(1, handle.width - x);
   final height = rect.height.ceil().clamp(1, handle.height - y);
   return RegionRect(x: x, y: y, width: width, height: height);
+}
+
+int _scaleForModel(String? name, List<ModelEntry> models) {
+  if (name == null) return 1;
+  for (final model in models) {
+    if (model.name == name) return model.scale;
+  }
+  return 1;
+}
+
+(int, int) _fitDimensions(int width, int height, int maxEdge) {
+  if (width <= maxEdge && height <= maxEdge) return (width, height);
+  if (width >= height) return (maxEdge, (height * maxEdge / width).floor());
+  return ((width * maxEdge / height).floor(), maxEdge);
 }
 
 void _showMessage(BuildContext context, String message) {

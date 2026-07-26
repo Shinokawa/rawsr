@@ -11,8 +11,9 @@ pub use decode::{
 };
 pub use develop::{BaseCurve, DevelopParams, SrgbImage, WhiteBalance, develop};
 pub use export::{
-    TiffBandSink, TiffContainer, TiffInfo, choose_tiff_container, inspect_tiff,
-    restore_tiled_to_tiff, restore_tiled_to_tiff_with_transform, write_srgb16_tiff,
+    JpegBandSink, TiffBandSink, TiffContainer, TiffInfo, choose_tiff_container, inspect_tiff,
+    restore_tiled_to_jpeg_with_transform, restore_tiled_to_tiff,
+    restore_tiled_to_tiff_with_transform, write_srgb8_jpeg_with_transform, write_srgb16_tiff,
     write_srgb16_tiff_as, write_srgb16_tiff_as_with_transform, write_srgb16_tiff_with_transform,
 };
 pub use grade::{GradeParams, grade_image, grade_rgb};

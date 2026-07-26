@@ -203,6 +203,7 @@ void main() {
     library.updateSaturation(-25);
     final appliedGrade = gradeParamsFromSettings(library.state.selected!.grade);
     final job = ExportJob(
+      outputFormat: 'tiff',
       handle: ImageHandle(id: BigInt.one, width: 8000, height: 5320),
       outputPath: r'C:\输出\样片.tiff',
       device: 'auto',
@@ -321,6 +322,7 @@ void main() {
 }
 
 final _job = ExportJob(
+  outputFormat: 'tiff',
   handle: ImageHandle(id: BigInt.one, width: 8000, height: 5320),
   outputPath: r'C:\输出\样片.tiff',
   denoiseModel: 'denoise-a',

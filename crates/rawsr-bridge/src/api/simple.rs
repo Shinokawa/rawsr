@@ -11,7 +11,8 @@ use rawsr_core::{
     Manifest, ManifestEntry, ModelKind, Rect, Restorer, SrgbImage, SrgbTile, TileHint, TileOptions,
     compiled_execution_providers, decode_raw, decode_std, develop, extract_thumbnail, grade_rgb,
     last_execution_provider_allocations, load_model_from_path, restore_tiled_to_image,
-    restore_tiled_to_preview_with_transform, restore_tiled_to_tiff_with_transform,
+    restore_tiled_to_jpeg_with_transform, restore_tiled_to_preview_with_transform,
+    restore_tiled_to_tiff_with_transform, write_srgb8_jpeg_with_transform,
     write_srgb16_tiff_with_transform,
 };
 
@@ -143,6 +144,9 @@ pub struct StripEvent {
 pub struct ExportJob {
     pub handle: ImageHandle,
     pub output_path: String,
+    pub output_format: String,
+    pub jpeg_quality: Option<u32>,
+    pub max_output_edge: Option<u32>,
     pub crop: Option<RegionRect>,
     pub denoise_model: Option<String>,
     pub sr_model: Option<String>,
@@ -914,13 +918,39 @@ fn export_job_work(
         !job.output_path.trim().is_empty(),
         "output path must not be empty"
     );
+    let output_format = job.output_format.to_ascii_lowercase();
+    ensure!(
+        matches!(output_format.as_str(), "jpeg" | "tiff"),
+        "output format must be jpeg or tiff"
+    );
     let extension = output
         .extension()
         .and_then(|value| value.to_str())
         .unwrap_or_default();
+    let expected_extensions = if output_format == "jpeg" {
+        ".jpg or .jpeg"
+    } else {
+        ".tif or .tiff"
+    };
+    let has_expected_extension = if output_format == "jpeg" {
+        extension.eq_ignore_ascii_case("jpg") || extension.eq_ignore_ascii_case("jpeg")
+    } else {
+        extension.eq_ignore_ascii_case("tif") || extension.eq_ignore_ascii_case("tiff")
+    };
     ensure!(
-        extension.eq_ignore_ascii_case("tif") || extension.eq_ignore_ascii_case("tiff"),
-        "output path must use .tif or .tiff"
+        has_expected_extension,
+        "output path must use {expected_extensions}"
+    );
+    let jpeg_quality =
+        u8::try_from(job.jpeg_quality.unwrap_or(92)).context("JPEG quality exceeds 255")?;
+    ensure!(
+        (1..=100).contains(&jpeg_quality),
+        "JPEG quality must be in 1..=100"
+    );
+    let max_output_edge = job.max_output_edge.unwrap_or(12_000);
+    ensure!(
+        (1..=12_000).contains(&max_output_edge),
+        "JPEG longest edge must be in 1..=12000"
     );
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)
@@ -961,28 +991,47 @@ fn export_job_work(
     if let Some(model) = job.sr_model.as_deref() {
         let (_, restorer) = load_named_model(model, Some(ModelKind::Sr), device)?;
         let restorer = CancellableRestorer::new(restorer, Arc::clone(&cancelled));
-        restore_tiled_to_tiff_with_transform(
-            &output,
-            &current,
-            &restorer,
-            None,
-            options,
-            &grade,
-            &|progress| {
-                let overall = (completed_stages + progress) / stage_count;
-                let _ = sink.add(JobEvent {
-                    job_id,
-                    state: "running".to_owned(),
-                    progress: overall,
-                    message: format!("正在超分 · {}%", (progress * 100.0).round()),
-                    output_path: None,
-                    reason: None,
-                });
-            },
-        )?;
+        let progress = |progress: f32| {
+            let overall = (completed_stages + progress) / stage_count;
+            let _ = sink.add(JobEvent {
+                job_id,
+                state: "running".to_owned(),
+                progress: overall,
+                message: format!("正在超分 · {}%", (progress * 100.0).round()),
+                output_path: None,
+                reason: None,
+            });
+        };
+        if output_format == "jpeg" {
+            restore_tiled_to_jpeg_with_transform(
+                &output,
+                &current,
+                &restorer,
+                None,
+                options,
+                max_output_edge,
+                jpeg_quality,
+                &grade,
+                &progress,
+            )?;
+        } else {
+            restore_tiled_to_tiff_with_transform(
+                &output, &current, &restorer, None, options, &grade, &progress,
+            )?;
+        }
     } else {
         ensure_not_cancelled(&cancelled)?;
-        write_srgb16_tiff_with_transform(&output, &current, &grade)?;
+        if output_format == "jpeg" {
+            write_srgb8_jpeg_with_transform(
+                &output,
+                &current,
+                max_output_edge,
+                jpeg_quality,
+                &grade,
+            )?;
+        } else {
+            write_srgb16_tiff_with_transform(&output, &current, &grade)?;
+        }
     }
     ensure_not_cancelled(&cancelled)
 }

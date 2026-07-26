@@ -588,6 +588,9 @@ impl SseDecode for crate::api::simple::ExportJob {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_handle = <crate::api::simple::ImageHandle>::sse_decode(deserializer);
         let mut var_outputPath = <String>::sse_decode(deserializer);
+        let mut var_outputFormat = <String>::sse_decode(deserializer);
+        let mut var_jpegQuality = <Option<u32>>::sse_decode(deserializer);
+        let mut var_maxOutputEdge = <Option<u32>>::sse_decode(deserializer);
         let mut var_crop = <Option<crate::api::simple::RegionRect>>::sse_decode(deserializer);
         let mut var_denoiseModel = <Option<String>>::sse_decode(deserializer);
         let mut var_srModel = <Option<String>>::sse_decode(deserializer);
@@ -598,6 +601,9 @@ impl SseDecode for crate::api::simple::ExportJob {
         return crate::api::simple::ExportJob {
             handle: var_handle,
             output_path: var_outputPath,
+            output_format: var_outputFormat,
+            jpeg_quality: var_jpegQuality,
+            max_output_edge: var_maxOutputEdge,
             crop: var_crop,
             denoise_model: var_denoiseModel,
             sr_model: var_srModel,
@@ -1057,6 +1063,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::simple::ExportJob {
         [
             self.handle.into_into_dart().into_dart(),
             self.output_path.into_into_dart().into_dart(),
+            self.output_format.into_into_dart().into_dart(),
+            self.jpeg_quality.into_into_dart().into_dart(),
+            self.max_output_edge.into_into_dart().into_dart(),
             self.crop.into_into_dart().into_dart(),
             self.denoise_model.into_into_dart().into_dart(),
             self.sr_model.into_into_dart().into_dart(),
@@ -1396,6 +1405,9 @@ impl SseEncode for crate::api::simple::ExportJob {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::api::simple::ImageHandle>::sse_encode(self.handle, serializer);
         <String>::sse_encode(self.output_path, serializer);
+        <String>::sse_encode(self.output_format, serializer);
+        <Option<u32>>::sse_encode(self.jpeg_quality, serializer);
+        <Option<u32>>::sse_encode(self.max_output_edge, serializer);
         <Option<crate::api::simple::RegionRect>>::sse_encode(self.crop, serializer);
         <Option<String>>::sse_encode(self.denoise_model, serializer);
         <Option<String>>::sse_encode(self.sr_model, serializer);

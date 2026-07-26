@@ -56,6 +56,14 @@ MODELS: dict[str, ModelSpec] = {
         sha256="a5f85dbf6f13cc54011f849577508be4923a61555c9755a961036055e521a961",
         sample_edge=64,
     ),
+    "span-x2": ModelSpec(
+        source_file="span_x2.pth",
+        output_file="span-x2.onnx",
+        download_url="https://github.com/OpenModelDB/model-hub/releases/download/span/2x-spanx2_ch48.pth",
+        canonical_url="https://github.com/OpenModelDB/model-hub/releases/download/span/2x-spanx2_ch48.pth",
+        sha256="2f965167188762269f9f7ca5cad9d4028ae0814ec9b7c2cb101e61fae7753d81",
+        sample_edge=64,
+    ),
     "realesrgan-general-x4v3": ModelSpec(
         source_file="realesr-general-x4v3.pth",
         output_file="realesrgan-general-x4v3.onnx",
@@ -174,7 +182,7 @@ def parse_args() -> argparse.Namespace:
         "models",
         nargs="*",
         choices=sorted(MODELS),
-        help="model names to process; defaults to all five production models",
+        help="model names to process; defaults to every production model",
     )
     parser.add_argument("--download-only", action="store_true")
     parser.add_argument("--force", action="store_true")

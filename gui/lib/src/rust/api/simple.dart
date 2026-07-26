@@ -131,6 +131,9 @@ class ExifData {
 class ExportJob {
   final ImageHandle handle;
   final String outputPath;
+  final String outputFormat;
+  final int? jpegQuality;
+  final int? maxOutputEdge;
   final RegionRect? crop;
   final String? denoiseModel;
   final String? srModel;
@@ -142,6 +145,9 @@ class ExportJob {
   const ExportJob({
     required this.handle,
     required this.outputPath,
+    required this.outputFormat,
+    this.jpegQuality,
+    this.maxOutputEdge,
     this.crop,
     this.denoiseModel,
     this.srModel,
@@ -155,6 +161,9 @@ class ExportJob {
   int get hashCode =>
       handle.hashCode ^
       outputPath.hashCode ^
+      outputFormat.hashCode ^
+      jpegQuality.hashCode ^
+      maxOutputEdge.hashCode ^
       crop.hashCode ^
       denoiseModel.hashCode ^
       srModel.hashCode ^
@@ -170,6 +179,9 @@ class ExportJob {
           runtimeType == other.runtimeType &&
           handle == other.handle &&
           outputPath == other.outputPath &&
+          outputFormat == other.outputFormat &&
+          jpegQuality == other.jpegQuality &&
+          maxOutputEdge == other.maxOutputEdge &&
           crop == other.crop &&
           denoiseModel == other.denoiseModel &&
           srModel == other.srModel &&

@@ -657,18 +657,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ExportJob dco_decode_export_job(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
     return ExportJob(
       handle: dco_decode_image_handle(arr[0]),
       outputPath: dco_decode_String(arr[1]),
-      crop: dco_decode_opt_box_autoadd_region_rect(arr[2]),
-      denoiseModel: dco_decode_opt_String(arr[3]),
-      srModel: dco_decode_opt_String(arr[4]),
-      device: dco_decode_String(arr[5]),
-      tileSize: dco_decode_opt_box_autoadd_u_32(arr[6]),
-      memoryBudgetMib: dco_decode_opt_box_autoadd_u_32(arr[7]),
-      grade: dco_decode_grade_params_dto(arr[8]),
+      outputFormat: dco_decode_String(arr[2]),
+      jpegQuality: dco_decode_opt_box_autoadd_u_32(arr[3]),
+      maxOutputEdge: dco_decode_opt_box_autoadd_u_32(arr[4]),
+      crop: dco_decode_opt_box_autoadd_region_rect(arr[5]),
+      denoiseModel: dco_decode_opt_String(arr[6]),
+      srModel: dco_decode_opt_String(arr[7]),
+      device: dco_decode_String(arr[8]),
+      tileSize: dco_decode_opt_box_autoadd_u_32(arr[9]),
+      memoryBudgetMib: dco_decode_opt_box_autoadd_u_32(arr[10]),
+      grade: dco_decode_grade_params_dto(arr[11]),
     );
   }
 
@@ -1064,6 +1067,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_handle = sse_decode_image_handle(deserializer);
     var var_outputPath = sse_decode_String(deserializer);
+    var var_outputFormat = sse_decode_String(deserializer);
+    var var_jpegQuality = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_maxOutputEdge = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_crop = sse_decode_opt_box_autoadd_region_rect(deserializer);
     var var_denoiseModel = sse_decode_opt_String(deserializer);
     var var_srModel = sse_decode_opt_String(deserializer);
@@ -1074,6 +1080,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return ExportJob(
       handle: var_handle,
       outputPath: var_outputPath,
+      outputFormat: var_outputFormat,
+      jpegQuality: var_jpegQuality,
+      maxOutputEdge: var_maxOutputEdge,
       crop: var_crop,
       denoiseModel: var_denoiseModel,
       srModel: var_srModel,
@@ -1571,6 +1580,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_image_handle(self.handle, serializer);
     sse_encode_String(self.outputPath, serializer);
+    sse_encode_String(self.outputFormat, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.jpegQuality, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.maxOutputEdge, serializer);
     sse_encode_opt_box_autoadd_region_rect(self.crop, serializer);
     sse_encode_opt_String(self.denoiseModel, serializer);
     sse_encode_opt_String(self.srModel, serializer);

@@ -34,6 +34,17 @@
       "notes": "SPAN 4x super-resolution"
     },
     {
+      "name": "span-x2",
+      "file": "span-x2.onnx",
+      "scale": 2,
+      "kind": "sr",
+      "tile": 256,
+      "overlap": 32,
+      "channel_order": "RGB",
+      "input_range": "zero_to_one",
+      "notes": "SPAN 2x super-resolution (detail-preserving)"
+    },
+    {
       "name": "realesrgan-general-x4v3",
       "file": "realesrgan-general-x4v3.onnx",
       "scale": 4,
