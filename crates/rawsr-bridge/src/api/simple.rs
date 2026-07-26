@@ -149,6 +149,7 @@ pub struct ExportJob {
     pub max_output_edge: Option<u32>,
     pub crop: Option<RegionRect>,
     pub denoise_model: Option<String>,
+    pub denoise_strength: f32,
     pub sr_model: Option<String>,
     pub device: String,
     pub tile_size: Option<u32>,
@@ -965,12 +966,17 @@ fn export_job_work(
     };
     let device = parse_device(&job.device)?;
     let grade = job.grade.to_core()?;
+    ensure!(
+        job.denoise_strength.is_finite() && (0.0..=1.0).contains(&job.denoise_strength),
+        "denoise strength must be in 0..=1"
+    );
     let stage_count =
         usize::from(job.denoise_model.is_some()) + usize::from(job.sr_model.is_some());
     let stage_count = stage_count.max(1) as f32;
     let mut completed_stages = 0.0_f32;
 
     if let Some(model) = job.denoise_model.as_deref() {
+        let before_denoise = current.clone();
         let (_, restorer) = load_named_model(model, Some(ModelKind::Denoise), device)?;
         let restorer = CancellableRestorer::new(restorer, Arc::clone(&cancelled));
         current = restore_tiled_to_image(&current, &restorer, None, options, &|progress| {
@@ -984,6 +990,7 @@ fn export_job_work(
                 reason: None,
             });
         })?;
+        blend_srgb(&before_denoise, &mut current, job.denoise_strength)?;
         completed_stages += 1.0;
         ensure_not_cancelled(&cancelled)?;
     }
@@ -1034,6 +1041,21 @@ fn export_job_work(
         }
     }
     ensure_not_cancelled(&cancelled)
+}
+
+fn blend_srgb(original: &SrgbImage, processed: &mut SrgbImage, strength: f32) -> Result<()> {
+    ensure!(
+        (original.w, original.h) == (processed.w, processed.h),
+        "cannot blend images with different dimensions"
+    );
+    ensure!(
+        original.data.len() == processed.data.len(),
+        "cannot blend images with different sample counts"
+    );
+    for (source, output) in original.data.iter().zip(&mut processed.data) {
+        *output = *source + (*output - *source) * strength;
+    }
+    Ok(())
 }
 
 fn load_named_model(

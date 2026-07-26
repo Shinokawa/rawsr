@@ -657,8 +657,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ExportJob dco_decode_export_job(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
     return ExportJob(
       handle: dco_decode_image_handle(arr[0]),
       outputPath: dco_decode_String(arr[1]),
@@ -667,11 +667,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       maxOutputEdge: dco_decode_opt_box_autoadd_u_32(arr[4]),
       crop: dco_decode_opt_box_autoadd_region_rect(arr[5]),
       denoiseModel: dco_decode_opt_String(arr[6]),
-      srModel: dco_decode_opt_String(arr[7]),
-      device: dco_decode_String(arr[8]),
-      tileSize: dco_decode_opt_box_autoadd_u_32(arr[9]),
-      memoryBudgetMib: dco_decode_opt_box_autoadd_u_32(arr[10]),
-      grade: dco_decode_grade_params_dto(arr[11]),
+      denoiseStrength: dco_decode_f_32(arr[7]),
+      srModel: dco_decode_opt_String(arr[8]),
+      device: dco_decode_String(arr[9]),
+      tileSize: dco_decode_opt_box_autoadd_u_32(arr[10]),
+      memoryBudgetMib: dco_decode_opt_box_autoadd_u_32(arr[11]),
+      grade: dco_decode_grade_params_dto(arr[12]),
     );
   }
 
@@ -1072,6 +1073,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_maxOutputEdge = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_crop = sse_decode_opt_box_autoadd_region_rect(deserializer);
     var var_denoiseModel = sse_decode_opt_String(deserializer);
+    var var_denoiseStrength = sse_decode_f_32(deserializer);
     var var_srModel = sse_decode_opt_String(deserializer);
     var var_device = sse_decode_String(deserializer);
     var var_tileSize = sse_decode_opt_box_autoadd_u_32(deserializer);
@@ -1085,6 +1087,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       maxOutputEdge: var_maxOutputEdge,
       crop: var_crop,
       denoiseModel: var_denoiseModel,
+      denoiseStrength: var_denoiseStrength,
       srModel: var_srModel,
       device: var_device,
       tileSize: var_tileSize,
@@ -1585,6 +1588,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_32(self.maxOutputEdge, serializer);
     sse_encode_opt_box_autoadd_region_rect(self.crop, serializer);
     sse_encode_opt_String(self.denoiseModel, serializer);
+    sse_encode_f_32(self.denoiseStrength, serializer);
     sse_encode_opt_String(self.srModel, serializer);
     sse_encode_String(self.device, serializer);
     sse_encode_opt_box_autoadd_u_32(self.tileSize, serializer);

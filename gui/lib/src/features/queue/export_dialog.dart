@@ -44,6 +44,7 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
   var selectedArea = canvas.crop != null;
   var device = 'auto';
   var outputFormat = 'jpeg';
+  var denoiseStrength = 0.7;
 
   final confirmed = await showDialog<bool>(
     context: context,
@@ -81,6 +82,22 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
                       }
                     }),
                   ),
+                  if (denoise != null) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Text(
+                      '降噪强度 ${(denoiseStrength * 100).round()}% · 调低可保留更多细节',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Slider(
+                      value: denoiseStrength,
+                      min: 0.2,
+                      max: 1,
+                      divisions: 16,
+                      label: '${(denoiseStrength * 100).round()}%',
+                      onChanged: (value) =>
+                          setState(() => denoiseStrength = value),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String?>(
                     initialValue: sr,
@@ -262,6 +279,7 @@ Future<void> showExportDialog(BuildContext context, WidgetRef ref) async {
     maxOutputEdge: outputFormat == 'jpeg' ? 12000 : null,
     crop: crop,
     denoiseModel: denoise,
+    denoiseStrength: denoiseStrength,
     srModel: sr,
     device: device,
     memoryBudgetMib: 2048,

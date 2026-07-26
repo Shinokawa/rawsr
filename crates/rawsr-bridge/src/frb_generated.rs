@@ -593,6 +593,7 @@ impl SseDecode for crate::api::simple::ExportJob {
         let mut var_maxOutputEdge = <Option<u32>>::sse_decode(deserializer);
         let mut var_crop = <Option<crate::api::simple::RegionRect>>::sse_decode(deserializer);
         let mut var_denoiseModel = <Option<String>>::sse_decode(deserializer);
+        let mut var_denoiseStrength = <f32>::sse_decode(deserializer);
         let mut var_srModel = <Option<String>>::sse_decode(deserializer);
         let mut var_device = <String>::sse_decode(deserializer);
         let mut var_tileSize = <Option<u32>>::sse_decode(deserializer);
@@ -606,6 +607,7 @@ impl SseDecode for crate::api::simple::ExportJob {
             max_output_edge: var_maxOutputEdge,
             crop: var_crop,
             denoise_model: var_denoiseModel,
+            denoise_strength: var_denoiseStrength,
             sr_model: var_srModel,
             device: var_device,
             tile_size: var_tileSize,
@@ -1068,6 +1070,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::simple::ExportJob {
             self.max_output_edge.into_into_dart().into_dart(),
             self.crop.into_into_dart().into_dart(),
             self.denoise_model.into_into_dart().into_dart(),
+            self.denoise_strength.into_into_dart().into_dart(),
             self.sr_model.into_into_dart().into_dart(),
             self.device.into_into_dart().into_dart(),
             self.tile_size.into_into_dart().into_dart(),
@@ -1410,6 +1413,7 @@ impl SseEncode for crate::api::simple::ExportJob {
         <Option<u32>>::sse_encode(self.max_output_edge, serializer);
         <Option<crate::api::simple::RegionRect>>::sse_encode(self.crop, serializer);
         <Option<String>>::sse_encode(self.denoise_model, serializer);
+        <f32>::sse_encode(self.denoise_strength, serializer);
         <Option<String>>::sse_encode(self.sr_model, serializer);
         <String>::sse_encode(self.device, serializer);
         <Option<u32>>::sse_encode(self.tile_size, serializer);

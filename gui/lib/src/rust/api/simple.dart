@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `cache`, `cached_image`, `cached_strip_preprocess`, `crop_srgb`, `display_error`, `elapsed_millis`, `enqueue_export_impl`, `ensure_not_cancelled`, `export_job_work`, `extract_thumb_impl`, `find_manifest`, `fit_dimensions`, `image_pixel`, `import_model_impl`, `job_cancel_flags`, `list_models_impl`, `load_named_model`, `model_cache`, `model_entry_to_bridge`, `new`, `open_image_impl`, `parse_device`, `prepare_denoised_strip_input`, `render_image`, `render_standalone`, `render_strip_reference`, `run_one_strip`, `run_test_strip_impl`, `sample_bilinear_with_grade`, `sample_bilinear`, `send_job_event`, `send_strip_event`, `store_strip_preprocess`, `strip_preprocess_cache`, `strip_preprocess_is_cacheable`, `to_core_rect`, `to_core`, `to_u8`, `validate_region`
+// These functions are ignored because they are not marked as `pub`: `blend_srgb`, `cache`, `cached_image`, `cached_strip_preprocess`, `crop_srgb`, `display_error`, `elapsed_millis`, `enqueue_export_impl`, `ensure_not_cancelled`, `export_job_work`, `extract_thumb_impl`, `find_manifest`, `fit_dimensions`, `image_pixel`, `import_model_impl`, `job_cancel_flags`, `list_models_impl`, `load_named_model`, `model_cache`, `model_entry_to_bridge`, `new`, `open_image_impl`, `parse_device`, `prepare_denoised_strip_input`, `render_image`, `render_standalone`, `render_strip_reference`, `run_one_strip`, `run_test_strip_impl`, `sample_bilinear_with_grade`, `sample_bilinear`, `send_job_event`, `send_strip_event`, `store_strip_preprocess`, `strip_preprocess_cache`, `strip_preprocess_is_cacheable`, `to_core_rect`, `to_core`, `to_u8`, `validate_region`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CancellableRestorer`, `StripPreprocessCacheEntry`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `run`, `scale`, `tile_hint`
 
@@ -136,6 +136,7 @@ class ExportJob {
   final int? maxOutputEdge;
   final RegionRect? crop;
   final String? denoiseModel;
+  final double denoiseStrength;
   final String? srModel;
   final String device;
   final int? tileSize;
@@ -150,6 +151,7 @@ class ExportJob {
     this.maxOutputEdge,
     this.crop,
     this.denoiseModel,
+    required this.denoiseStrength,
     this.srModel,
     required this.device,
     this.tileSize,
@@ -166,6 +168,7 @@ class ExportJob {
       maxOutputEdge.hashCode ^
       crop.hashCode ^
       denoiseModel.hashCode ^
+      denoiseStrength.hashCode ^
       srModel.hashCode ^
       device.hashCode ^
       tileSize.hashCode ^
@@ -184,6 +187,7 @@ class ExportJob {
           maxOutputEdge == other.maxOutputEdge &&
           crop == other.crop &&
           denoiseModel == other.denoiseModel &&
+          denoiseStrength == other.denoiseStrength &&
           srModel == other.srModel &&
           device == other.device &&
           tileSize == other.tileSize &&

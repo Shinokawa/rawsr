@@ -64,6 +64,14 @@ MODELS: dict[str, ModelSpec] = {
         sha256="2f965167188762269f9f7ca5cad9d4028ae0814ec9b7c2cb101e61fae7753d81",
         sample_edge=64,
     ),
+    "realesrgan-x2plus": ModelSpec(
+        source_file="realesrgan_x2plus.pth",
+        output_file="realesrgan-x2plus.onnx",
+        download_url="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth",
+        canonical_url="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth",
+        sha256="49fafd45f8fd7aa8d31ab2a22d14d91b536c34494a5cfe31eb5d89c2fa266abb",
+        sample_edge=64,
+    ),
     "realesrgan-general-x4v3": ModelSpec(
         source_file="realesr-general-x4v3.pth",
         output_file="realesrgan-general-x4v3.onnx",

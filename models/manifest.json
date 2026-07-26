@@ -45,6 +45,17 @@
       "notes": "SPAN 2x super-resolution (detail-preserving)"
     },
     {
+      "name": "realesrgan-x2plus",
+      "file": "realesrgan-x2plus.onnx",
+      "scale": 2,
+      "kind": "sr",
+      "tile": 256,
+      "overlap": 32,
+      "channel_order": "RGB",
+      "input_range": "zero_to_one",
+      "notes": "RealESRGAN 2x super-resolution (repairing)"
+    },
+    {
       "name": "realesrgan-general-x4v3",
       "file": "realesrgan-general-x4v3.onnx",
       "scale": 4,
