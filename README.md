@@ -1,88 +1,32 @@
-# rawsr
+# RawSR
 
-`rawsr` 是本地 GPU 加速的 RAW 降噪与超分工具，包含 Rust CLI/Core 和 Flutter 桌面 GUI。固定管线为：解码 → 显影 → 降噪 → 选区优先超分 → 调色 → 16-bit TIFF 导出。
+RawSR 是一款在本机处理照片的 RAW 降噪与超分桌面工具。
 
+## 下载
 
-## 环境
+在 [Releases](https://github.com/Shinokawa/rawsr/releases/latest) 下载最新的 Windows 压缩包，完整解压后运行 `rawsr_gui.exe`。
 
-- Rust stable（edition 2024）
-- Flutter 3.x stable
-- Windows 使用 DirectML → CPU；macOS 使用 CoreML → CPU；启用 `rawsr-core/cuda` feature 后可使用 CUDA
-- 模型转换需要 Python 3.11+，依赖见 `scripts/requirements-models.txt`
+不需要安装 Python、Rust 或其他运行环境。
 
-## 构建与测试
+## 使用
 
-```powershell
-cargo build --workspace
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+1. 将照片拖进窗口。
+2. 在画面上框选需要检查的细节区域。
+3. 生成试片，对比处理前后的效果。
+4. 选定效果后导出整张照片，或只导出框选区域。
 
-./scripts/setup-flutter-plugins.ps1
-cd gui
-flutter analyze
-flutter test
-flutter build windows
-```
+导出时默认使用 JPEG，适合日常保存、分享和打印。需要继续在其他后期软件中处理时，也可以选择 16 位 TIFF 母版；全图超分后的 TIFF 文件可能很大。
 
-Flutter/Rust 桥锁定为 `flutter_rust_bridge 2.12.0`。重新生成绑定：
+## 支持
 
-```powershell
-just gen
-```
+- Windows 10 / 11
+- Sony ARW 与常见 JPEG、PNG、TIFF 照片
+- 本机 GPU 加速；无法使用时会自动以 CPU 处理
 
-## 生产模型
+## 隐私
 
-五个首发权重不会提交到 Git。下载、校验 SHA-256 并导出动态 H/W ONNX：
+RawSR 在本机完成解码、处理和导出，不上传照片或 EXIF 信息。
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -r scripts\requirements-models.txt
-.\.venv\Scripts\python scripts\convert_models.py
-```
+## 反馈
 
-生产模型冒烟（Windows DirectML）：
-
-```powershell
-.\scripts\smoke-models.ps1 -Device direct-ml
-```
-
-## CLI
-
-```powershell
-cargo build --release -p rawsr-cli
-
-.\target\release\rawsr.exe photo.ARW --denoise scunet-gan -o denoised.tif
-.\target\release\rawsr.exe photo.ARW --sr realesrgan-x4plus --crop 1200,800,2000,1500 -o crop-x4.tif
-.\target\release\rawsr.exe --list-models --manifest models\manifest.json
-```
-
-输出为带 sRGB ICC 的 RGB16 TIFF；超分通过重叠 tile 和行带流式写出，不在内存中保存整幅 4x f32 图像。
-
-## GUI
-
-```powershell
-just run-win
-```
-
-GUI 支持 RAW/JPEG/PNG/TIFF 导入、内嵌 RAW 缩略图、局部金字塔预览、可移动/缩放裁切框、分离的降噪与超分试片、基础调色、定片、导出队列、模型导入和实际 EP 节点统计。调色滑杆采用节流实时预览，松手、数值输入和归零会立即刷新；调色参数以同一份已应用快照贯穿主预览、局部预览、AI 试片和最终导出，并且调色刷新不会重新解码 RAW。降噪和超分试片每次选择一个模型，统一采用左侧基准、右侧处理结果的同步缩放 A/B 对比；超分左侧显示超分前输入，存在降噪定片时则显示固定降噪前级的结果。相同照片、范围和降噪模型再次生成时会复用受内存上限约束的中间缓存，ONNX Runtime 会话也会按模型与设备复用。未框选时最终导出仍可处理全图，而交互试片会自动选取受控的中央样本区域。
-
-## Windows 发行版
-
-首发仅提供 Windows x64 包。从 [Releases](https://github.com/Shinokawa/rawsr/releases) 下载 `RawSR-windows-x64-v0.1.0.zip`，解压后运行 `rawsr_gui.exe` 即可；压缩包内已包含首发模型。需要 Windows 10/11 与支持 DirectX 12 的显卡，无法使用 DirectML 时会自动回退 CPU。
-
-## 真实 Sony ARW 验收
-
-真实 RAW 测试通过环境变量传入，避免把大型照片提交进仓库：
-
-```powershell
-$env:RAWSR_TEST_ARW = 'E:\path\to\sample.ARW'
-cargo test -p rawsr-core decode_real_arw -- --ignored --nocapture
-.\scripts\smoke.ps1 -ArwPath $env:RAWSR_TEST_ARW
-
-cd gui
-flutter test integration_test/bridge_test.dart -d windows
-```
-
-本地开发夹具可记录在忽略提交的 `.rawsr/local-fixtures.toml`，示例见 `.rawsr/local-fixtures.example.toml`。
-
-模型基准可用 `scripts/benchmark-models.ps1` 复现；已验证数据见 `BENCH.md`。
+遇到无法导入、导出失败或效果异常，请到 [Issues](https://github.com/Shinokawa/rawsr/issues) 描述相机型号、照片格式和错误提示。请不要上传包含隐私的原片。
